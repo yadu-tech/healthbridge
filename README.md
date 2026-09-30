@@ -1,0 +1,53 @@
+# HealthBridge
+
+**Bridging disconnected African healthcare datasets.**
+A reproducible data-engineering platform that ingests public maternal and child health data from multiple sources, validates and harmonizes it, and serves reliable data for analytics and downstream machine learning.
+
+> **Status: early development.** The repository currently contains the project scope, a source-profiling script and local infrastructure. Sections marked _planned_ describe intended work.
+
+## Problem
+
+Public health data about Africa is spread across organizations that publish it with different schemas, code systems, granularities and definitions. Reconciling these sources is slow, and unreconciled data can quietly weaken analytics and models. See [docs/SCOPE.md](docs/SCOPE.md).
+
+## Research question
+
+How can automated data integration and data-quality validation improve the reliability and usability of heterogeneous healthcare data for analytics and AI applications in Africa?
+
+## Data sources
+
+| Source | Access |
+|---|---|
+| WHO Global Health Observatory | OData API, no registration |
+| World Bank indicators | REST API, no registration |
+| UNICEF data warehouse | SDMX API, no registration |
+
+Only aggregate, public, non-personal data is used.
+
+## Architecture _(planned)_
+
+`raw` → `staging` → `core` (star schema) → `marts` → `ml`, with data-quality results in `dq`. Details in [docs/SCOPE.md](docs/SCOPE.md).
+
+## Getting started
+
+Requirements: Python 3.11+, Docker Desktop.
+
+```bash
+cp .env.example .env          # set a local password
+docker compose up -d          # start PostgreSQL with the layered schemas
+python -m venv .venv && .venv/Scripts/activate
+pip install -e ".[dev]"
+pytest
+python scripts/profile_sources.py   # regenerate docs/source_profile.md
+```
+
+## Roadmap
+
+See [docs/SCOPE.md](docs/SCOPE.md) for MVP vs advanced features, evaluation design and threats to validity.
+
+## Limitations and ethics
+
+Documented in [docs/SCOPE.md](docs/SCOPE.md) and expanded as results are produced.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
