@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Secrets / local config
+.env
+
+# Data: raw snapshots are reproducible from manifests, not committed
+data/raw/*
+!data/raw/.gitkeep
+data/interim/
+*.parquet
+*.duckdb
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
