@@ -13,6 +13,13 @@ from pathlib import Path
 
 import psycopg
 
+from healthbridge.core.outliers import (
+    NEIGHBORS_EACH_SIDE,
+    OUTLIER_ABS_FLOOR,
+    OUTLIER_REL_FLOOR,
+    OUTLIER_Z,
+    flag_temporal_outliers,
+)
 from healthbridge.db import REPO_ROOT
 from healthbridge.ingest.snapshot import MANIFEST_NAME
 from healthbridge.reference import ReferenceMismatch, _add_alias, load_reference
@@ -24,6 +31,7 @@ DEPENDENCE_TOLERANCE = 0.01   # two values "agree" if within 1% of the larger
 DEPENDENCE_MIN_SHARED = 30    # fewer shared country-years than this is too little evidence
 DEPENDENCE_MIN_SHARE = 0.90   # share of shared cells that must agree to call sources dependent
 CONFLICT_TOLERANCE = 0.10     # independent evidence groups differing by more than 10% = conflict
+GROUP_DISAGREEMENT_TOLERANCE = 0.05  # sources of one evidence group differing by more than 5%
 
 
 def _sql(name: str) -> str:
@@ -135,13 +143,15 @@ def build_core(
     dependence_min_shared: int = DEPENDENCE_MIN_SHARED,
     dependence_min_share: float = DEPENDENCE_MIN_SHARE,
     conflict_tolerance: float = CONFLICT_TOLERANCE,
+    group_disagreement_tolerance: float = GROUP_DISAGREEMENT_TOLERANCE,
 ) -> dict:
     started = time.perf_counter()
     manifest = json.loads((Path(run_dir) / MANIFEST_NAME).read_text(encoding="utf-8"))
     run_id = manifest["run_id"]
     years = tuple(manifest["scope"]["years"])
     params = {"run_id": run_id, "year_min": years[0], "year_max": years[1],
-              "conflict_tolerance": conflict_tolerance}
+              "conflict_tolerance": conflict_tolerance,
+              "group_disagreement_tolerance": group_disagreement_tolerance}
 
     with conn.transaction():
         if not conn.execute(
@@ -163,6 +173,7 @@ def build_core(
         conn.execute(_sql("30_rejected.sql"), params)
         conn.execute(_sql("40_fact.sql"), params)
         conn.execute("DROP TABLE pg_temp.core_std, pg_temp.core_classified")
+        outliers = flag_temporal_outliers(conn, run_id)
 
         _measure_dependence(conn, run_id, dependence_tolerance, dependence_min_shared,
                             dependence_min_share)
@@ -178,6 +189,8 @@ def build_core(
         ).fetchone()[0]
         summary = {"run_id": run_id, "staged_rows": staged, "rows_loaded": counts[0],
                    "rows_rejected": rejected, "headline_rows": counts[1], "selected_rows": counts[2]}
+        # Alerts are reported separately from the accounting above so it keeps its meaning.
+        alerts = {"temporal_outliers": outliers}
         conn.execute(
             "INSERT INTO core.build_log (run_id, staged_rows, rows_loaded, rows_rejected,"
             " headline_rows, selected_rows, duration_seconds, parameters)"
@@ -187,6 +200,11 @@ def build_core(
              json.dumps({"dependence_tolerance": dependence_tolerance,
                          "dependence_min_shared": dependence_min_shared,
                          "dependence_min_share": dependence_min_share,
-                         "conflict_tolerance": conflict_tolerance})),
+                         "conflict_tolerance": conflict_tolerance,
+                         "group_disagreement_tolerance": group_disagreement_tolerance,
+                         "outlier_z": OUTLIER_Z, "outlier_rel_floor": OUTLIER_REL_FLOOR,
+                         "outlier_abs_floor": OUTLIER_ABS_FLOOR,
+                         "outlier_neighbors_each_side": NEIGHBORS_EACH_SIDE,
+                         "alerts": alerts})),
         )
     return summary

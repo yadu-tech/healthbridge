@@ -6,7 +6,7 @@ INSERT INTO core.fact_observation (
     run_id, source_key, country_key, indicator_key, year, period_text, value, lower_bound,
     upper_bound, sex, wealth_quintile, residence, maternal_education, age_group, upstream_label,
     other_dims, is_headline, is_selected, n_candidates, selection_rule, quality_flags,
-    staging_source_file, staging_row_num)
+    staging_source_file, staging_row_num, country_resolution)
 SELECT %(run_id)s, ds.source_key, h.country_key, h.indicator_key, h.year, h.period_text, h.value,
        h.low, h.high, h.sex, h.wealth_quintile, h.residence, h.maternal_education, h.age_raw,
        h.upstream_label, h.other_dims, h.is_headline,
@@ -20,7 +20,7 @@ SELECT %(run_id)s, ds.source_key, h.country_key, h.indicator_key, h.year, h.peri
                      AND (h.value < h.low OR h.value > h.high) THEN 'bounds_violation' END,
            CASE WHEN h.period_text !~ '^[0-9]{4}$' THEN 'noncanonical_period' END
        ], NULL),
-       h.source_file, h.row_num
+       h.source_file, h.row_num, h.country_resolution
 FROM (
     SELECT k.*,
            count(*) FILTER (WHERE is_headline) OVER w AS n_candidates,
