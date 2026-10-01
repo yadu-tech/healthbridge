@@ -3,7 +3,7 @@
 **Bridging disconnected African healthcare datasets.**
 A reproducible data-engineering platform that ingests public maternal and child health data from multiple sources, validates and harmonizes it, and serves reliable data for analytics and downstream machine learning.
 
-> **Status: early development.** The repository currently contains the project scope, a source-profiling script, local infrastructure and the raw ingestion layer. Sections marked _planned_ describe intended work.
+> **Status: early development.** The repository currently contains the project scope, a source-profiling script, local infrastructure and the raw ingestion layer, the staging layer and the data-quality baseline. Sections marked _planned_ describe intended work.
 
 ## Problem
 
@@ -73,6 +73,26 @@ python -m healthbridge.staging load [snapshot_dir]   # default: latest snapshot 
 - UNICEF dataflows have different dimension columns, so shared fields are real columns and the rest go to a `jsonb` column.
 - A snapshot that fails checksum verification is refused. Loading is idempotent and transactional: a failed load leaves previous data untouched. Several snapshots can coexist.
 - Schema changes are versioned migrations with checksums; editing an applied migration is an error.
+
+## Data-quality baseline
+
+Measures the staged (not yet cleaned) data and stores every metric in `dq.metric`, so the "before" state is reproducible and queryable:
+
+```bash
+python -m healthbridge.dq baseline            # measure the latest loaded snapshot
+python -m healthbridge.dq report --out docs/results/dq_baseline.md
+```
+
+Dimensions: **completeness** (row-level missing rate and country-year grid coverage), **validity** (unparseable values, plausible ranges, values outside the source's own uncertainty bounds, invalid years or country codes), **uniqueness** (exact duplicates, and rows ambiguous at the (country, year) grain), **consistency** (non-year period formats) and **integration** (schema and vocabulary heterogeneity, naive cross-source join fan-out). Scores are reported per dimension; the composite is an unweighted mean with a leave-one-dimension-out range because the weights are arbitrary.
+
+First baseline (snapshot `20261001T110703Z`, full report in [docs/results/dq_baseline.md](docs/results/dq_baseline.md)):
+
+- Values are almost entirely **valid** (no range, bounds, year or country-code violations), but **uniqueness at the analysis grain is low** (UNICEF 14%, WHO 27%): the sources publish sex, wealth-quintile and survey breakdowns alongside national totals.
+- A naive (country, year) join across the three sources multiplies rows: **58x** for under-5 mortality and **228x** for stunting.
+- 7 of the 54 African states (Djibouti, Egypt, Libya, Morocco, Sudan, Somalia, Tunisia) are outside WHO's `AFR` region.
+- WHO and UNICEF code the same categories differently (e.g. `SEX_BTSX` vs `_T`), and UNICEF's seven series use four different column sets.
+
+The checks are tested against a hand-built snapshot with a known number of seeded defects, and the baseline is reproducible: re-running it gives identical metrics.
 
 ## Roadmap
 
