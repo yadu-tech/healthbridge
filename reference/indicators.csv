@@ -1,0 +1,8 @@
+concept,name,unit,domain,valid_min,valid_max,unicef_headline_age,definition
+under5_mortality,Under-five mortality rate,deaths per 1000 live births,child_health,0,1000,,Probability of dying before the fifth birthday per 1000 live births
+neonatal_mortality,Neonatal mortality rate,deaths per 1000 live births,child_health,0,1000,,Deaths in the first 28 days of life per 1000 live births
+maternal_mortality_ratio,Maternal mortality ratio,deaths per 100000 live births,maternal_health,0,100000,_T,Maternal deaths per 100000 live births
+skilled_birth_attendance,Births attended by skilled health personnel,percent of births,maternal_health,0,100,Y15T49,Share of births attended by skilled health personnel
+dtp3_coverage,DTP3 immunization coverage among one-year-olds,percent,child_health,0,100,M12T23,Share of one-year-olds who received the third dose of DTP-containing vaccine
+measles_mcv1_coverage,Measles (MCV1) immunization coverage among one-year-olds,percent,child_health,0,100,M12T23,Share of one-year-olds who received the first dose of measles-containing vaccine
+stunting_prevalence,Stunting prevalence in children under 5,percent of children under 5,child_health,0,100,_T,Share of children under 5 with height-for-age more than 2 SD below the reference median

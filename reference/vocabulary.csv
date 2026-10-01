@@ -1,0 +1,32 @@
+dimension,source,source_value,canonical,note
+sex,who,SEX_BTSX,total,both sexes
+sex,who,SEX_MLE,male,
+sex,who,SEX_FMLE,female,
+sex,unicef,_T,total,
+sex,unicef,M,male,
+sex,unicef,F,female,
+wealth_quintile,who,WEALTHQUINTILE_TOTL,total,
+wealth_quintile,who,WEALTHQUINTILE_WQ1,q1,poorest; orientation inferred from the observed gradient (highest under-5 mortality in WQ1) - verify against WHO metadata
+wealth_quintile,who,WEALTHQUINTILE_WQ2,q2,
+wealth_quintile,who,WEALTHQUINTILE_WQ3,q3,
+wealth_quintile,who,WEALTHQUINTILE_WQ4,q4,
+wealth_quintile,who,WEALTHQUINTILE_WQ5,q5,richest
+wealth_quintile,unicef,_T,total,UNICEF code list CL_WEALTH_QUINTILE
+wealth_quintile,unicef,Q1,q1,Lowest
+wealth_quintile,unicef,Q2,q2,Second
+wealth_quintile,unicef,Q3,q3,Middle
+wealth_quintile,unicef,Q4,q4,Fourth
+wealth_quintile,unicef,Q5,q5,Highest
+wealth_quintile,unicef,B20,bottom_20,Bottom 20%
+wealth_quintile,unicef,B40,bottom_40,Bottom 40%
+wealth_quintile,unicef,B60,bottom_60,Bottom 60%
+wealth_quintile,unicef,B80,bottom_80,Bottom 80%
+wealth_quintile,unicef,M40,middle_40,Middle 40%
+wealth_quintile,unicef,M60,middle_60,Middle 60%
+wealth_quintile,unicef,R20,top_20,Richest 20%
+wealth_quintile,unicef,R40,top_40,Richest 40%
+wealth_quintile,unicef,R60,top_60,Richest 60%
+wealth_quintile,unicef,R80,top_80,Richest 80%
+residence,unicef,_T,total,UNICEF code list CL_RESIDENCE
+residence,unicef,U,urban,Urban area
+residence,unicef,R,rural,Rural area

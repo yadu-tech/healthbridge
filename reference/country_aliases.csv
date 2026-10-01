@@ -1,0 +1,23 @@
+alias,iso3,alias_type
+Ivory Coast,CIV,legacy_name
+Cote d'Ivoire,CIV,ascii_variant
+Cote dIvoire,CIV,ascii_variant
+Swaziland,SWZ,legacy_name
+Cape Verde,CPV,legacy_name
+"Gambia, The",GMB,world_bank_style
+The Gambia,GMB,variant
+"Congo, Rep.",COG,world_bank_style
+Republic of the Congo,COG,variant
+Congo-Brazzaville,COG,variant
+Congo (Brazzaville),COG,variant
+"Congo, Dem. Rep.",COD,world_bank_style
+DR Congo,COD,abbreviation
+DRC,COD,abbreviation
+Congo-Kinshasa,COD,variant
+Congo (Kinshasa),COD,variant
+"Egypt, Arab Rep.",EGY,world_bank_style
+United Republic of Tanzania,TZA,variant
+Tanzania United Republic of,TZA,variant
+Sao Tome & Principe,STP,variant
+São Tomé and Príncipe,STP,variant
+Guinea Bissau,GNB,variant
