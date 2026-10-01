@@ -33,9 +33,10 @@ Requirements: Python 3.11+, Docker Desktop.
 
 ```bash
 cp .env.example .env          # set a local password
-docker compose up -d          # start PostgreSQL with the layered schemas
+docker compose up -d          # start PostgreSQL
 python -m venv .venv && .venv/Scripts/activate
 pip install -e ".[dev]"
+python -m healthbridge.staging migrate   # create the layered schemas and staging tables
 pytest
 python scripts/profile_sources.py   # regenerate docs/source_profile.md
 ```
@@ -56,6 +57,22 @@ python -m healthbridge.ingest verify data/raw/<run_id>   # recompute every SHA-2
 - Snapshots are never overwritten, so any analysis can name the exact data it used.
 
 Design notes from live testing: the WHO GHO API rejects queries with more than 100 filter nodes, so the 54-country filter uses OData `in (...)`. The World Bank reports some errors with HTTP 200, so payloads are checked, not just status codes.
+
+## Staging layer
+
+Loads a verified raw snapshot into typed, **source-shaped** PostgreSQL tables (`staging.who_observation`, `staging.worldbank_observation`, `staging.unicef_observation`):
+
+```bash
+python -m healthbridge.staging migrate        # apply versioned SQL migrations (sql/migrations)
+python -m healthbridge.staging load [snapshot_dir]   # default: latest snapshot in data/raw
+```
+
+- Staging **types** values but does not clean, deduplicate or harmonize them; that happens in later layers.
+- Every row records its lineage (`run_id`, `source_file`, `row_num`), and `staging.load_log` stores each file's SHA-256 and row count.
+- Unparseable values become NULL while the raw text is kept, so the data-quality layer can still count them.
+- UNICEF dataflows have different dimension columns, so shared fields are real columns and the rest go to a `jsonb` column.
+- A snapshot that fails checksum verification is refused. Loading is idempotent and transactional: a failed load leaves previous data untouched. Several snapshots can coexist.
+- Schema changes are versioned migrations with checksums; editing an applied migration is an error.
 
 ## Roadmap
 
