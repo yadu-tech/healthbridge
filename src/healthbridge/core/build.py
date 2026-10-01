@@ -39,7 +39,12 @@ def _sql(name: str) -> str:
 
 
 def _check_against_staging(conn: psycopg.Connection, run_id: str) -> None:
-    """Reference data must agree with what the sources actually say about countries."""
+    """Reference data must agree with what the sources say about countries they identify exactly.
+
+    Only rows whose ISO3 code is a known country take part. A row with an unknown or malformed
+    code is a data fault, handled (rejected) per row later; it must neither stop the build nor
+    teach the reference a wrong name.
+    """
     reference = dict(conn.execute("SELECT iso3, iso2 FROM core.dim_country").fetchall())
     reference = {k.strip(): v.strip() for k, v in reference.items()}
     problems = []
@@ -47,16 +52,15 @@ def _check_against_staging(conn: psycopg.Connection, run_id: str) -> None:
         "SELECT DISTINCT country_iso3, country_id FROM staging.worldbank_observation"
         " WHERE run_id = %s", (run_id,)
     ).fetchall():
-        if iso3 not in reference:
-            problems.append(f"World Bank country {iso3} is not in reference/countries.csv")
-        elif reference[iso3] != iso2:
+        if iso3 in reference and reference[iso3] != iso2:
             problems.append(f"ISO2 mismatch for {iso3}: reference {reference[iso3]}, World Bank {iso2}")
     if problems:
         raise ReferenceMismatch("; ".join(problems))
 
     for name, iso3 in conn.execute(
         "SELECT DISTINCT country_name, country_iso3 FROM staging.worldbank_observation"
-        " WHERE run_id = %s AND country_name IS NOT NULL", (run_id,)
+        " WHERE run_id = %s AND country_name IS NOT NULL"
+        " AND country_iso3 IN (SELECT iso3 FROM core.dim_country)", (run_id,)
     ).fetchall():
         _add_alias(conn, name, iso3, "world_bank_name")
 

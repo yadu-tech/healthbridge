@@ -126,3 +126,18 @@ def test_one_disagreeing_cell_in_a_dependent_pair_is_flagged(pg_conn, tmp_path):
     assert [(a.strip(), b, float(c), d) for a, b, c, d in flagged] == [("KEN", 2013, 0.095, False)]
     total = q(pg_conn, "SELECT count(*) FROM core.fact_reconciled WHERE run_id = 'chk_group'")[0][0]
     assert total == 21
+
+
+@pytest.mark.integration
+def test_a_corrupted_country_code_is_rejected_per_row_and_does_not_stop_the_build(pg_conn, tmp_path):
+    bad = wb_row("XXX", "NG", 2012, 50)
+    bad["country"]["value"] = "Nigeria"          # the name belongs to a real country
+    good = [wb_row("NGA", "NG", 2010 + i, 100 - i) for i in range(4)]
+    run_dir = snapshot(tmp_path, "chk_badcode", wb_rows=[bad, *good], years=(2010, 2020))
+    load_snapshot(pg_conn, run_dir)
+    summary = build_core(pg_conn, run_dir)            # must not raise ReferenceMismatch
+    assert summary["rows_rejected"] == 1 and summary["rows_loaded"] == 4
+    reason = q(pg_conn, "SELECT reason FROM core.rejected_record WHERE run_id = 'chk_badcode'")
+    assert reason == [("unknown_country",)]
+    # the corrupted row must not have taught the reference a wrong alias
+    assert q(pg_conn, "SELECT iso3 FROM core.country_alias WHERE alias_norm = 'nigeria'")[0][0].strip() == "NGA"
