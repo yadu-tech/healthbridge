@@ -13,8 +13,8 @@ TIMEOUT = (10, 180)  # (connect, read) seconds; UNICEF CSV exports can be slow
 def make_session() -> requests.Session:
     session = requests.Session()
     retry = Retry(
-        total=5,
-        backoff_factor=1.0,
+        total=6,
+        backoff_factor=3.0,  # waits 0, 6, 12, 24, 48, 96 s; also honours Retry-After
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset({"GET"}),
         respect_retry_after_header=True,

@@ -39,6 +39,9 @@ CONCEPTS: tuple[Concept, ...] = (
     Concept("stunting_prevalence", "NUTSTUNTINGPREV", "SH.STA.STNT.ZS", "NUTRITION", "NT_ANT_HAZ_NE2"),
 )
 
+# Minimum seconds between consecutive requests to a source. UNICEF answers bursts with HTTP 429.
+SOURCE_PAUSE_SECONDS: dict[str, float] = {"who": 0.0, "worldbank": 1.0, "unicef": 8.0}
+
 WHO_BASE = "https://ghoapi.azureedge.net/api"
 WORLDBANK_BASE = "https://api.worldbank.org/v2"
 UNICEF_BASE = "https://sdmx.data.unicef.org/ws/public/sdmxapi/rest"
