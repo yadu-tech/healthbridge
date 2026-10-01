@@ -37,11 +37,11 @@ See `docs/source_profile.md` (regenerate with `python scripts/profile_sources.py
 
 Consequence: the research contribution is **provenance-aware integration and grain/definition harmonization**, evaluated with fault injection because raw source quality is already high.
 
-## 5. Architecture (planned)
+## 5. Architecture
 
-`raw` (immutable snapshots, checksums, manifests) → `staging` (typed, source-shaped) → `core` (standardized dimensions; `fact_observation`) → `marts` (analytics) → `ml` (feature tables). Data-quality results are stored in `dq`.
+`raw` (immutable snapshots, checksums, manifests) → `staging` (typed, source-shaped) → `core` (standardized dimensions; `fact_observation`) → `marts` (analytics, planned) → `ml` (feature tables, planned). Data-quality results are stored in `dq`. Raw, staging, core and dq are implemented.
 
-Core model: `dim_country` (ISO3, aliases, WHO/World Bank/UN/AU region mappings), `dim_indicator` (harmonized concept mapped to each source code, with unit and definition), `dim_source`, `dim_date`, and `fact_observation` at the grain (country, indicator, year, disaggregation, source) with lineage, quality flags and a documented reconciled value.
+Core model (implemented): `dim_country` (ISO3/ISO2, canonical name, UN M49 sub-region, WHO region; name aliases in `country_alias`), `dim_indicator` (harmonized concept with unit, definition and plausible range; source codes in `indicator_source_map`), `dim_source`, `dim_year` (the data is annual, so a year dimension replaces a full date dimension), and `fact_observation` at an explicit grain (source, country, indicator, year, sex, wealth quintile, residence, maternal education, age group, upstream series) with lineage, quality flags and selection flags. `fact_reconciled` holds one value per country-indicator-year with evidence-group provenance. Rejected rows are stored with reasons in `rejected_record`. Every rule and its evidence is recorded in [harmonization.md](harmonization.md).
 
 ## 6. Evaluation design
 

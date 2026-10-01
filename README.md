@@ -3,7 +3,7 @@
 **Bridging disconnected African healthcare datasets.**
 A reproducible data-engineering platform that ingests public maternal and child health data from multiple sources, validates and harmonizes it, and serves reliable data for analytics and downstream machine learning.
 
-> **Status: early development.** The repository currently contains the project scope, a source-profiling script, local infrastructure and the raw ingestion layer, the staging layer and the data-quality baseline. Sections marked _planned_ describe intended work.
+> **Status: early development.** Implemented so far: raw ingestion, staging, data-quality measurement and the core (integrated) layer. Analytics, machine learning, the API and the dashboard are planned. Sections marked _planned_ describe intended work.
 
 ## Problem
 
@@ -93,6 +93,33 @@ First baseline (snapshot `20261001T110703Z`, full report in [docs/results/dq_bas
 - WHO and UNICEF code the same categories differently (e.g. `SEX_BTSX` vs `_T`), and UNICEF's seven series use four different column sets.
 
 The checks are tested against a hand-built snapshot with a known number of seeded defects, and the baseline is reproducible: re-running it gives identical metrics.
+
+## Core layer (integration)
+
+Turns the three source-shaped staging tables into one consistent model:
+
+```bash
+python -m healthbridge.core build                 # staging -> core (dimensions, fact, reconciliation)
+python -m healthbridge.dq baseline --stage core   # measure the core layer with the same engine
+python -m healthbridge.dq compare --out docs/results/before_after.md
+```
+
+- **Explicit grain.** Every row keeps canonical sex, wealth, residence, maternal-education and age dimensions; nothing is deleted to force uniqueness. The default analyst view, `core.v_headline_observation`, has one national-total row per source, country, indicator and year.
+- **Documented rules.** Headline definitions, the vocabulary crosswalk, survey selection, rejection reasons and reconciliation are recorded with their evidence in [docs/harmonization.md](docs/harmonization.md). Reference data (countries, indicators, vocabulary) is version-controlled in `reference/`.
+- **Source dependence is derived, not assumed.** Sources that publish the same underlying estimate form one evidence group, so agreement between them is not counted as independent confirmation. Reconciled values are never averages, and conflicts between independent groups are flagged.
+- **Lineage.** Every core row points back to its staging row and raw snapshot file; every rejected row is stored with a reason.
+
+First before/after comparison (full report: [docs/results/before_after.md](docs/results/before_after.md)):
+
+| | Before (staging) | After (core) |
+|---|---|---|
+| Rows unique at the (country, indicator, year) grain | 30.5% | 100% (by construction) |
+| Naive 3-source join, under-5 mortality / stunting | 58x / 228x row inflation | 1.0x |
+| "Conflicting" joined stunting rows | 82% (mostly breakdowns vs totals) | 16% (genuine disagreement) |
+| Concepts with independent cross-validation | not measurable | 1 of 7 (stunting) |
+| Records rejected | not tracked | 3,478 of 90,503, all empty World Bank placeholders |
+
+For six of the seven concepts, WHO, UNICEF and the World Bank publish the same underlying estimate (at least 93% of shared country-years agree within 1%), so their agreement cannot validate the number. Stunting is the exception: WHO's model-based estimates and the survey-based UNICEF and World Bank values disagree by more than 10% in 15.6% of the 326 country-years they share.
 
 ## Roadmap
 
