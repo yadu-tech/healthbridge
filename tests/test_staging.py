@@ -6,8 +6,10 @@ import pytest
 from healthbridge.db import MigrationError, migrate
 from healthbridge.ingest.snapshot import SnapshotWriter
 from healthbridge.ingest.sources import RawPage
+from healthbridge.staging import load as load_module
 from healthbridge.staging import parse
 from healthbridge.staging.load import SnapshotIntegrityError, load_snapshot
+from healthbridge.staging.schema import SchemaError, check_schema
 
 WHO_JSON = json.dumps({"value": [
     {"Id": 7, "IndicatorCode": "X", "SpatialDimType": "COUNTRY", "SpatialDim": "NGA",
@@ -128,19 +130,66 @@ def test_load_refuses_a_tampered_snapshot_and_leaves_existing_rows_alone(pg_conn
 
 
 @pytest.mark.integration
-def test_failed_load_rolls_back_completely(pg_conn, tmp_path):
+def test_failed_load_rolls_back_completely(pg_conn, tmp_path, monkeypatch):
     run_dir = _snapshot(tmp_path, run_id="run3")
-    # Valid checksums, but unparseable content: the failure happens mid-load, after deletes.
-    bad = json.loads((run_dir / "manifest.json").read_text())
-    path = run_dir / "worldbank/SH.X/page-0001.json"
-    path.write_bytes(b"not json")
-    for entry in bad["files"]:
-        if entry["source"] == "worldbank":
-            entry["sha256"] = hashlib.sha256(b"not json").hexdigest()
-    (run_dir / "manifest.json").write_text(json.dumps(bad))
-    with pytest.raises(json.JSONDecodeError):
+
+    def explode(_content):
+        raise RuntimeError("parser failed mid-load")
+
+    # The schema check passes, so the failure happens after earlier files were already copied.
+    table, columns, _ = load_module.TABLES["worldbank"]
+    monkeypatch.setitem(load_module.TABLES, "worldbank", (table, columns, explode))
+    with pytest.raises(RuntimeError, match="mid-load"):
         load_snapshot(pg_conn, run_dir)
     rows = pg_conn.execute(
         "SELECT count(*) FROM staging.who_observation WHERE run_id = 'run3'"
     ).fetchone()[0]
     assert rows == 0  # the who rows copied before the failure were rolled back
+
+
+@pytest.mark.integration
+def test_missing_required_field_stops_the_load_before_touching_the_database(pg_conn, tmp_path):
+    run_dir = _snapshot(tmp_path, run_id="run4")
+    path = run_dir / "who/X/page-0001.json"
+    payload = json.loads(path.read_bytes())
+    for row in payload["value"]:
+        row["NumVal"] = row.pop("NumericValue")  # a renamed required column
+    path.write_bytes(json.dumps(payload).encode())
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    for entry in manifest["files"]:
+        if entry["path"] == "who/X/page-0001.json":
+            entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    (run_dir / "manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(SchemaError, match="NumericValue"):
+        load_snapshot(pg_conn, run_dir)
+    assert pg_conn.execute("SELECT count(*) FROM staging.load_log WHERE run_id = 'run4'").fetchone()[0] == 0
+
+
+@pytest.mark.integration
+def test_unexpected_extra_columns_are_recorded_not_fatal(pg_conn, tmp_path):
+    run_dir = _snapshot(tmp_path, run_id="run5")
+    path = run_dir / "unicef/F.IM_DTP3/page-0001.csv"
+    text = path.read_text().replace("REF_AREA,", "NEW_COLUMN,REF_AREA,", 1)
+    lines = text.splitlines()
+    path.write_text("\n".join([lines[0]] + ["x," + line for line in lines[1:]]) + "\n")
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    for entry in manifest["files"]:
+        if entry["path"].endswith("page-0001.csv"):
+            entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    (run_dir / "manifest.json").write_text(json.dumps(manifest))
+    load_snapshot(pg_conn, run_dir)
+    got = pg_conn.execute("SELECT unexpected_columns FROM staging.load_log"
+                          " WHERE run_id = 'run5' AND source = 'unicef'").fetchone()[0]
+    assert got == ["NEW_COLUMN"]
+
+
+def test_schema_report_per_source():
+    ok = check_schema("who", WHO_JSON)
+    assert ok.ok and ok.unexpected == []
+    assert check_schema("worldbank", WB_JSON).ok
+    assert check_schema("unicef", UNICEF_CSV).ok
+    broken = check_schema("worldbank", json.dumps([{"page": 1}, [{"country": {"id": "NG"}}]]).encode())
+    assert "countryiso3code" in broken.missing and "country.id" not in broken.missing
+    assert check_schema("who", b"not json").missing == ["<unreadable structure>"]
+    assert check_schema("unicef", b"").ok  # an empty file carries no schema evidence
+    assert check_schema("who", json.dumps({"value": []}).encode()).ok
