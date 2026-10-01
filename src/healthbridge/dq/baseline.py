@@ -29,17 +29,10 @@ from pathlib import Path
 import psycopg
 
 from healthbridge.ingest.snapshot import MANIFEST_NAME
+from healthbridge.reference import indicator_ranges
 
-# Plausible closed ranges per concept (inclusive). Coverage and prevalence are percentages.
-EXPECTED_RANGES: dict[str, tuple[float, float]] = {
-    "under5_mortality": (0, 1000),            # deaths per 1,000 live births
-    "neonatal_mortality": (0, 1000),
-    "maternal_mortality_ratio": (0, 100_000),  # deaths per 100,000 live births
-    "skilled_birth_attendance": (0, 100),
-    "dtp3_coverage": (0, 100),
-    "measles_mcv1_coverage": (0, 100),
-    "stunting_prevalence": (0, 100),
-}
+# Plausible closed ranges per concept (inclusive), from reference/indicators.csv.
+EXPECTED_RANGES: dict[str, tuple[float, float]] = indicator_ranges()
 SCORE_DIMENSIONS = ("completeness", "validity", "uniqueness", "consistency")
 
 
@@ -247,6 +240,49 @@ def _schema_variants(run_dir: Path, manifest: dict) -> list[Metric]:
     ]
 
 
+def _core_metrics(conn, run_id: str) -> list[Metric]:
+    """Pipeline accounting and reconciliation outcomes; only meaningful for the core layer."""
+    out: list[Metric] = []
+    staged = {(s, c): int(n) for s, c, n in conn.execute(
+        "SELECT source, concept, sum(rows_loaded) FROM staging.load_log WHERE run_id = %s GROUP BY 1, 2",
+        (run_id,)).fetchall()}
+    rejected: dict[tuple[str, str], dict[str, int]] = {}
+    for source, concept, reason, n in conn.execute(
+        "SELECT source, concept, reason, count(*) FROM core.rejected_record WHERE run_id = %s GROUP BY 1, 2, 3",
+        (run_id,)).fetchall():
+        rejected.setdefault((source, concept), {})[reason] = n
+    loaded = {(s, c): (n, h, sel) for s, c, n, h, sel in conn.execute(
+        "SELECT s.source_code, i.concept, count(*), count(*) FILTER (WHERE f.is_headline),"
+        " count(*) FILTER (WHERE f.is_selected) FROM core.fact_observation f"
+        " JOIN core.dim_source s USING (source_key) JOIN core.dim_indicator i USING (indicator_key)"
+        " WHERE f.run_id = %s GROUP BY 1, 2", (run_id,)).fetchall()}
+    for (source, concept), n_staged in sorted(staged.items()):
+        reasons = rejected.get((source, concept), {})
+        n_loaded, _headline, n_selected = loaded.get((source, concept), (0, 0, 0))
+        out.append(Metric("series", "lineage", "records_staged", float(n_staged), source, concept))
+        out.append(Metric("series", "lineage", "records_rejected", _ratio(sum(reasons.values()), n_staged),
+                          source, concept, sum(reasons.values()), n_staged, details=reasons))
+        out.append(Metric("series", "lineage", "records_loaded", float(n_loaded), source, concept))
+        out.append(Metric("series", "lineage", "records_selected", float(n_selected), source, concept,
+                          n_selected, n_staged))
+    for concept, cells, cross, conflicts in conn.execute(
+        "SELECT i.concept, count(*), count(*) FILTER (WHERE n_evidence_groups > 1),"
+        " count(*) FILTER (WHERE conflict) FROM core.fact_reconciled r"
+        " JOIN core.dim_indicator i USING (indicator_key) WHERE r.run_id = %s GROUP BY 1",
+        (run_id,)).fetchall():
+        out.append(Metric("concept", "integration", "cells_reconciled", float(cells), concept=concept))
+        out.append(Metric("concept", "integration", "cross_validated_cell_rate", _ratio(cross, cells),
+                          concept=concept, numerator=cross, denominator=cells))
+        out.append(Metric("concept", "integration", "conflict_rate_among_cross_validated",
+                          _ratio(conflicts, cross), concept=concept, numerator=conflicts, denominator=cross))
+    for concept, groups in conn.execute(
+        "SELECT concept, array_agg(DISTINCT group_label ORDER BY group_label) FROM core.evidence_group"
+        " WHERE run_id = %s GROUP BY 1", (run_id,)).fetchall():
+        out.append(Metric("concept", "integration", "independent_evidence_groups", float(len(groups)),
+                          concept=concept, details=groups))
+    return out
+
+
 def _scores(metrics: list[Metric]) -> list[Metric]:
     """Per-dimension scores in [0, 1] for each series, each source and overall."""
     rate_metric = {"completeness": "missing_rate", "validity": "invalid_row_rate",
@@ -284,8 +320,18 @@ def _scores(metrics: list[Metric]) -> list[Metric]:
     return result
 
 
+STAGE_RELATIONS = {"staging": "staging.v_observation", "core": "core.v_observation_dq"}
+
+
 def compute_baseline(conn: psycopg.Connection, run_dir: Path, stage: str = "staging") -> int:
-    """Measure the staged snapshot in ``run_dir`` and store the metrics; returns dq_run_id."""
+    """Measure one layer ('staging' or 'core') for the snapshot in ``run_dir``; returns dq_run_id.
+
+    The same checks run on both layers so their results are directly comparable. For 'core' the
+    measured surface is the default analyst view: one selected national-total row per source,
+    country, indicator and year.
+    """
+    if stage not in STAGE_RELATIONS:
+        raise ValueError(f"stage must be one of {sorted(STAGE_RELATIONS)}")
     started = time.perf_counter()
     run_dir = Path(run_dir)
     manifest = json.loads((run_dir / MANIFEST_NAME).read_text(encoding="utf-8"))
@@ -294,22 +340,26 @@ def compute_baseline(conn: psycopg.Connection, run_dir: Path, stage: str = "stag
     years = tuple(manifest["scope"]["years"])
 
     with conn.transaction():
+        ready_table = "staging.load_log" if stage == "staging" else "core.build_log"
         loaded = conn.execute(
-            "SELECT count(*) FROM staging.load_log WHERE run_id = %s", (run_id,)
+            f"SELECT count(*) FROM {ready_table} WHERE run_id = %s", (run_id,)
         ).fetchone()[0]
         if not loaded:
-            raise RuntimeError(f"snapshot {run_id} is not loaded; run `python -m healthbridge.staging load`")
+            raise RuntimeError(f"snapshot {run_id} is not loaded into {stage}; run the previous step first")
         # Explicit drop (not ON COMMIT DROP): that only fires when the *outermost* transaction
         # commits, so a caller with a transaction already open would otherwise keep the table.
         conn.execute("DROP TABLE IF EXISTS pg_temp.obs")
         conn.execute("CREATE TEMP TABLE obs AS"
-                     " SELECT * FROM staging.v_observation WHERE run_id = %s", (run_id,))
+                     f" SELECT * FROM {STAGE_RELATIONS[stage]} WHERE run_id = %s", (run_id,))
         conn.execute("CREATE INDEX ON obs (concept, iso3, year, source)")
         conn.execute("ANALYZE obs")
 
         metrics = (_row_level(conn, countries, years) + _coverage_and_grain(conn, countries, years)
-                   + _integration(conn) + _vocabulary(conn, run_id)
-                   + _schema_variants(run_dir, manifest))
+                   + _integration(conn))
+        if stage == "staging":
+            metrics += _vocabulary(conn, run_id) + _schema_variants(run_dir, manifest)
+        else:
+            metrics += _core_metrics(conn, run_id)
         metrics += _scores(metrics)
 
         conn.execute("DROP TABLE pg_temp.obs")
