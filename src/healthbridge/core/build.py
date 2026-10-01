@@ -67,7 +67,8 @@ def _check_against_staging(conn: psycopg.Connection, run_id: str) -> None:
     for iso3, codes, names in conn.execute(
         "SELECT spatial_dim, array_agg(DISTINCT parent_location_code),"
         " array_agg(DISTINCT parent_location) FROM staging.who_observation"
-        " WHERE run_id = %s AND parent_location_code IS NOT NULL GROUP BY 1", (run_id,)
+        " WHERE run_id = %s AND parent_location_code IS NOT NULL"
+        " AND spatial_dim IN (SELECT iso3 FROM core.dim_country) GROUP BY 1", (run_id,)
     ).fetchall():
         if len(codes) > 1:
             raise ReferenceMismatch(f"WHO assigns {iso3} to several regions: {codes}")

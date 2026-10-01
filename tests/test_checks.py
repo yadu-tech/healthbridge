@@ -141,3 +141,15 @@ def test_a_corrupted_country_code_is_rejected_per_row_and_does_not_stop_the_buil
     assert reason == [("unknown_country",)]
     # the corrupted row must not have taught the reference a wrong alias
     assert q(pg_conn, "SELECT iso3 FROM core.country_alias WHERE alias_norm = 'nigeria'")[0][0].strip() == "NGA"
+
+
+@pytest.mark.integration
+def test_one_unknown_code_in_two_who_regions_does_not_stop_the_build(pg_conn, tmp_path):
+    rows = [who_row("ABC", 2012, 50), who_row("ABC", 2013, 49), who_row("NGA", 2012, 100)]
+    rows[1]["ParentLocationCode"] = "EMR"        # the same unknown code, seen under two regions
+    run_dir = snapshot(tmp_path, "chk_region", who_rows=rows)
+    load_snapshot(pg_conn, run_dir)
+    summary = build_core(pg_conn, run_dir)       # must not raise ReferenceMismatch
+    assert (summary["rows_loaded"], summary["rows_rejected"]) == (1, 2)
+    assert q(pg_conn, "SELECT DISTINCT reason FROM core.rejected_record WHERE run_id = 'chk_region'") == [
+        ("unknown_country",)]
