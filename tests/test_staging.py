@@ -90,19 +90,23 @@ def test_load_snapshot_loads_rows_with_lineage_and_is_idempotent(pg_conn, tmp_pa
     assert load_snapshot(pg_conn, run_dir) == {"who": 2, "worldbank": 2, "unicef": 2}
     assert load_snapshot(pg_conn, run_dir) == {"who": 2, "worldbank": 2, "unicef": 2}  # reload
 
-    count = pg_conn.execute("SELECT count(*) FROM staging.who_observation").fetchone()[0]
+    count = pg_conn.execute(
+        "SELECT count(*) FROM staging.who_observation WHERE run_id = 'run1'"
+    ).fetchone()[0]
     assert count == 2  # replaced, not duplicated
     row = pg_conn.execute(
         "SELECT run_id, source_file, row_num, spatial_dim, numeric_value"
-        " FROM staging.who_observation ORDER BY row_num LIMIT 1"
+        " FROM staging.who_observation WHERE run_id = 'run1' ORDER BY row_num LIMIT 1"
     ).fetchone()
     assert row == ("run1", "who/X/page-0001.json", 1, "NGA", 97.5)
     log = pg_conn.execute(
-        "SELECT source, rows_loaded, length(sha256) FROM staging.load_log ORDER BY source"
+        "SELECT source, rows_loaded, length(sha256) FROM staging.load_log"
+        " WHERE run_id = 'run1' ORDER BY source"
     ).fetchall()
     assert log == [("unicef", 2, 64), ("who", 2, 64), ("worldbank", 2, 64)]
     extra = pg_conn.execute(
-        "SELECT extra->>'VACCINE' FROM staging.unicef_observation WHERE row_num = 1"
+        "SELECT extra->>'VACCINE' FROM staging.unicef_observation"
+        " WHERE run_id = 'run1' AND row_num = 1"
     ).fetchone()[0]
     assert extra == "DTP3"
 
@@ -111,11 +115,15 @@ def test_load_snapshot_loads_rows_with_lineage_and_is_idempotent(pg_conn, tmp_pa
 def test_load_refuses_a_tampered_snapshot_and_leaves_existing_rows_alone(pg_conn, tmp_path):
     run_dir = _snapshot(tmp_path, run_id="run2")
     load_snapshot(pg_conn, run_dir)
-    before = pg_conn.execute("SELECT count(*) FROM staging.who_observation").fetchone()[0]
+    before = pg_conn.execute(
+        "SELECT count(*) FROM staging.who_observation WHERE run_id = 'run2'"
+    ).fetchone()[0]
     (run_dir / "who/X/page-0001.json").write_bytes(b'{"value": []}')
     with pytest.raises(SnapshotIntegrityError):
         load_snapshot(pg_conn, run_dir)
-    after = pg_conn.execute("SELECT count(*) FROM staging.who_observation").fetchone()[0]
+    after = pg_conn.execute(
+        "SELECT count(*) FROM staging.who_observation WHERE run_id = 'run2'"
+    ).fetchone()[0]
     assert before == after
 
 
