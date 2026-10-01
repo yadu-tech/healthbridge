@@ -3,7 +3,7 @@
 **Bridging disconnected African healthcare datasets.**
 A reproducible data-engineering platform that ingests public maternal and child health data from multiple sources, validates and harmonizes it, and serves reliable data for analytics and downstream machine learning.
 
-> **Status: early development.** The repository currently contains the project scope, a source-profiling script and local infrastructure. Sections marked _planned_ describe intended work.
+> **Status: early development.** The repository currently contains the project scope, a source-profiling script, local infrastructure and the raw ingestion layer. Sections marked _planned_ describe intended work.
 
 ## Problem
 
@@ -39,6 +39,23 @@ pip install -e ".[dev]"
 pytest
 python scripts/profile_sources.py   # regenerate docs/source_profile.md
 ```
+
+## Raw ingestion layer
+
+Fetches the seven maternal and child health concepts for the 54 African states from WHO, the World Bank and UNICEF into an **immutable, checksummed snapshot**:
+
+```bash
+python -m healthbridge.ingest run                 # new snapshot under data/raw/<UTC timestamp>/
+python -m healthbridge.ingest verify data/raw/<run_id>   # recompute every SHA-256 against the manifest
+```
+
+- Responses are stored byte-for-byte; nothing is cleaned or reshaped in the raw layer.
+- `manifest.json` records, for every file, its source URL, HTTP status, size and SHA-256, plus the run scope, package and Python versions, and any failures.
+- A series is written only if fully downloaded. A failed series is recorded in the manifest and the run continues; the command exits non-zero.
+- Requests are paced per source and retried with backoff (UNICEF returns HTTP 429 on bursts).
+- Snapshots are never overwritten, so any analysis can name the exact data it used.
+
+Design notes from live testing: the WHO GHO API rejects queries with more than 100 filter nodes, so the 54-country filter uses OData `in (...)`. The World Bank reports some errors with HTTP 200, so payloads are checked, not just status codes.
 
 ## Roadmap
 
