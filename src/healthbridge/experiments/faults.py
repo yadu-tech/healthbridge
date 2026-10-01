@@ -402,6 +402,9 @@ def inject_schema(store: RawStore, parsed: dict, rng: random.Random, files_per_t
     required = {"who": "NumericValue", "worldbank": "countryiso3code", "unicef": "OBS_VALUE"}
     droppable = {"who": "SpatialDim", "worldbank": "date", "unicef": "TIME_PERIOD"}
     paths = sorted(store.entries)
+    if len(paths) < len(SCHEMA_FAULTS):
+        raise ValueError(f"need at least {len(SCHEMA_FAULTS)} files for the schema pass, have {len(paths)}")
+    files_per_type = min(files_per_type, len(paths) // len(SCHEMA_FAULTS))  # distinct files per fault
     rng.shuffle(paths)
     faults: list[Fault] = []
     cursor = 0
