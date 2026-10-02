@@ -44,7 +44,7 @@ def _git_version() -> str:
     try:
         sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
                              check=True).stdout.strip()
-        dirty = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True,
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True,
                                check=True).stdout.strip()
         return sha + ("+uncommitted" if dirty else "")
     except (OSError, subprocess.CalledProcessError):
@@ -99,6 +99,7 @@ def run_pass(conn, store: fx.RawStore, pool, universe, out_dir: Path, name: str,
     if not keep:
         shutil.rmtree(snapshot_dir)
     record["seconds"] = round(time.perf_counter() - started, 1)
+    record["code_version"] = _git_version()
     log.info("%s seed %d: %d faults in %.0fs", name, seed, len(faults), record["seconds"])
     return record
 
