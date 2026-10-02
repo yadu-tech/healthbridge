@@ -26,6 +26,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--n-validity", type=int, default=200, help="faults per validity type per seed")
     run.add_argument("--n-magnitude", type=int, default=50, help="faults per magnitude level per seed")
     run.add_argument("--keep", action="store_true", help="keep the corrupted snapshots on disk")
+    run.add_argument("--resume", action="store_true",
+                     help="continue an interrupted run, keeping finished (pass, seed) results")
 
     rep = sub.add_parser("report", help="render results.json as Markdown")
     rep.add_argument("--results", type=Path, default=Path("data/experiments/fault_injection/results.json"))
@@ -40,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
             snapshot = args.snapshot or latest_snapshot(Path("data/raw"))
             path = run_experiment(conn, snapshot, args.out, seeds=tuple(range(1, args.seeds + 1)),
                                   passes=tuple(args.passes), n_validity=args.n_validity,
-                                  n_magnitude=args.n_magnitude, keep=args.keep)
+                                  n_magnitude=args.n_magnitude, keep=args.keep, resume=args.resume)
         print(f"results: {path}")
         return 0
 

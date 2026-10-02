@@ -106,7 +106,8 @@ def run_pass(conn, store: fx.RawStore, pool, universe, out_dir: Path, name: str,
 def run_experiment(conn: psycopg.Connection, clean_run_dir: Path, out_dir: Path,
                    seeds: tuple[int, ...] = (1, 2, 3, 4, 5), passes: tuple[str, ...] = (
                        "validity", "magnitude", "schema"),
-                   n_validity: int = 200, n_magnitude: int = 50, keep: bool = False) -> Path:
+                   n_validity: int = 200, n_magnitude: int = 50, keep: bool = False,
+                   resume: bool = False) -> Path:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     store = fx.RawStore(clean_run_dir)
@@ -123,8 +124,23 @@ def run_experiment(conn: psycopg.Connection, clean_run_dir: Path, out_dir: Path,
         "runs": [],
     }
     results_path = out_dir / "results.json"
+    done: set[tuple[str, int]] = set()
+    if resume and results_path.exists():
+        previous = json.loads(results_path.read_text(encoding="utf-8"))
+        same = all(previous.get(k) == summary[k] for k in (
+            "clean_run_id", "seeds", "passes", "n_validity_per_type", "n_magnitude_per_level"))
+        if not same:
+            raise ValueError(f"{results_path} was produced with different settings; delete it or "
+                             "run without --resume")
+        # A run is reproducible from (pass, seed), so finished runs can simply be kept.
+        summary["runs"] = previous["runs"]
+        summary["code_version"] = previous["code_version"]
+        done = {(r["pass"], r["seed"]) for r in previous["runs"]}
+        log.info("resuming: %d of %d runs already done", len(done), len(seeds) * len(passes))
     for seed in seeds:
         for name in passes:
+            if (name, seed) in done:
+                continue
             summary["runs"].append(run_pass(conn, store, pool, universe, out_dir, name, seed,
                                             n_validity, n_magnitude, keep))
             results_path.write_text(json.dumps(summary, indent=1, default=list), encoding="utf-8")
