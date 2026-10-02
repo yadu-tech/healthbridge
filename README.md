@@ -139,6 +139,27 @@ Full report: [docs/results/fault_injection.md](docs/results/fault_injection.md).
 - **Naive loader** (parse, exact ISO3 join, drop nulls): it accepts every out-of-range value, every duplicate and every value change; the pipeline lets 18% of the 2,000 value changes through, all but one at 10% or below.
 - **Not covered:** valid-looking corruptions (a swapped but valid country or sex code, a small change with no context and no second source), and errors of kinds not injected here.
 
+## Analytics marts
+
+Analysis-ready tables built from the core layer, for one snapshot at a time:
+
+```bash
+python -m healthbridge.marts build                       # panel, latest values, trends, regions, associations, equity gaps, trust
+python -m healthbridge.marts report --out docs/results/analytics.md
+```
+
+Definitions, grains and caveats: [docs/analytics.md](docs/analytics.md). Results on the real snapshot: [docs/results/analytics.md](docs/results/analytics.md). Every value in the panel carries a quality tier, so an analysis can see which numbers could be cross-checked; associations are cross-country and descriptive only; regional averages are of countries, not people.
+
+What the first report shows (descriptive, one snapshot):
+
+- **Few values can be cross-checked.** Six of seven indicators have a single evidence group; stunting is the exception (19% of values cross-validated, 3.6% in conflict).
+- **Countries in a region differ widely.** For example, 2015 under-5 mortality in Western Africa has a median of 92 per 1000 with a range of 19 to 137.
+- **Progress since 2000 is broad but uneven.** Under-5 mortality fell in 96% of countries (median -3.5% a year) and maternal mortality in 91% (median -3.0% a year); DTP3 coverage rose in 76%.
+- **Associations are strong but are only associations.** Across countries, under-5 mortality has a rank correlation of -0.74 with DTP3 coverage and -0.68 with skilled birth attendance (n = 54 and 49); the change between 2000 and 2015 is correlated at -0.54 with DTP3 change. Countries are not independent observations, so the intervals understate uncertainty.
+- **Equity gaps are large and consistent.** Using each country's latest gap, the poorest-to-richest ratio of under-5 mortality is above 1 in all 48 countries with data (median 1.7), girls have lower under-5 mortality than boys in all 54 (median ratio 0.84), and skilled birth attendance is lower among the poorest (median 0.72).
+- **Some series are out of date.** Skilled birth attendance is a median of 3 years behind (up to 14); 37% of countries are 5 or more years behind.
+- **Some extreme values are unverified.** A few countries show large short-run rises in under-5 mortality (single-year spikes and multi-year shifts). The outlier check flags the former but not the latter, and these values have not been checked against source documentation.
+
 ## Roadmap
 
 See [docs/SCOPE.md](docs/SCOPE.md) for MVP vs advanced features, evaluation design and threats to validity.
