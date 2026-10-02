@@ -3,7 +3,7 @@
 **Bridging disconnected African healthcare datasets.**
 A reproducible data-engineering platform that ingests public maternal and child health data from multiple sources, validates and harmonizes it, and serves reliable data for analytics and downstream machine learning.
 
-> **Status: early development.** The repository currently contains the project scope, a source-profiling script, local infrastructure and the raw ingestion layer. Sections marked _planned_ describe intended work.
+> **Status: early development.** Implemented so far: raw ingestion, staging, data-quality measurement and the core (integrated) layer. Analytics, machine learning, the API and the dashboard are planned. Sections marked _planned_ describe intended work.
 
 ## Problem
 
@@ -33,9 +33,10 @@ Requirements: Python 3.11+, Docker Desktop.
 
 ```bash
 cp .env.example .env          # set a local password
-docker compose up -d          # start PostgreSQL with the layered schemas
+docker compose up -d          # start PostgreSQL
 python -m venv .venv && .venv/Scripts/activate
 pip install -e ".[dev]"
+python -m healthbridge.staging migrate   # create the layered schemas and staging tables
 pytest
 python scripts/profile_sources.py   # regenerate docs/source_profile.md
 ```
@@ -56,6 +57,87 @@ python -m healthbridge.ingest verify data/raw/<run_id>   # recompute every SHA-2
 - Snapshots are never overwritten, so any analysis can name the exact data it used.
 
 Design notes from live testing: the WHO GHO API rejects queries with more than 100 filter nodes, so the 54-country filter uses OData `in (...)`. The World Bank reports some errors with HTTP 200, so payloads are checked, not just status codes.
+
+## Staging layer
+
+Loads a verified raw snapshot into typed, **source-shaped** PostgreSQL tables (`staging.who_observation`, `staging.worldbank_observation`, `staging.unicef_observation`):
+
+```bash
+python -m healthbridge.staging migrate        # apply versioned SQL migrations (sql/migrations)
+python -m healthbridge.staging load [snapshot_dir]   # default: latest snapshot in data/raw
+```
+
+- Staging **types** values but does not clean, deduplicate or harmonize them; that happens in later layers.
+- Every row records its lineage (`run_id`, `source_file`, `row_num`), and `staging.load_log` stores each file's SHA-256 and row count.
+- Unparseable values become NULL while the raw text is kept, so the data-quality layer can still count them.
+- UNICEF dataflows have different dimension columns, so shared fields are real columns and the rest go to a `jsonb` column.
+- A snapshot that fails checksum verification is refused. Loading is idempotent and transactional: a failed load leaves previous data untouched. Several snapshots can coexist.
+- Schema changes are versioned migrations with checksums; editing an applied migration is an error.
+
+## Data-quality baseline
+
+Measures the staged (not yet cleaned) data and stores every metric in `dq.metric`, so the "before" state is reproducible and queryable:
+
+```bash
+python -m healthbridge.dq baseline            # measure the latest loaded snapshot
+python -m healthbridge.dq report --out docs/results/dq_baseline.md
+```
+
+Dimensions: **completeness** (row-level missing rate and country-year grid coverage), **validity** (unparseable values, plausible ranges, values outside the source's own uncertainty bounds, invalid years or country codes), **uniqueness** (exact duplicates, and rows ambiguous at the (country, year) grain), **consistency** (non-year period formats) and **integration** (schema and vocabulary heterogeneity, naive cross-source join fan-out). Scores are reported per dimension; the composite is an unweighted mean with a leave-one-dimension-out range because the weights are arbitrary.
+
+First baseline (snapshot `20261001T110703Z`, full report in [docs/results/dq_baseline.md](docs/results/dq_baseline.md)):
+
+- Values are almost entirely **valid** (no range, bounds, year or country-code violations), but **uniqueness at the analysis grain is low** (UNICEF 14%, WHO 27%): the sources publish sex, wealth-quintile and survey breakdowns alongside national totals.
+- A naive (country, year) join across the three sources multiplies rows: **58x** for under-5 mortality and **228x** for stunting.
+- 7 of the 54 African states (Djibouti, Egypt, Libya, Morocco, Sudan, Somalia, Tunisia) are outside WHO's `AFR` region.
+- WHO and UNICEF code the same categories differently (e.g. `SEX_BTSX` vs `_T`), and UNICEF's seven series use four different column sets.
+
+The checks are tested against a hand-built snapshot with a known number of seeded defects, and the baseline is reproducible: re-running it gives identical metrics.
+
+## Core layer (integration)
+
+Turns the three source-shaped staging tables into one consistent model:
+
+```bash
+python -m healthbridge.core build                 # staging -> core (dimensions, fact, reconciliation)
+python -m healthbridge.dq baseline --stage core   # measure the core layer with the same engine
+python -m healthbridge.dq compare --out docs/results/before_after.md
+```
+
+- **Explicit grain.** Every row keeps canonical sex, wealth, residence, maternal-education and age dimensions; nothing is deleted to force uniqueness. The default analyst view, `core.v_headline_observation`, has one national-total row per source, country, indicator and year.
+- **Documented rules.** Headline definitions, the vocabulary crosswalk, survey selection, rejection reasons and reconciliation are recorded with their evidence in [docs/harmonization.md](docs/harmonization.md). Reference data (countries, indicators, vocabulary) is version-controlled in `reference/`.
+- **Source dependence is derived, not assumed.** Sources that publish the same underlying estimate form one evidence group, so agreement between them is not counted as independent confirmation. Reconciled values are never averages, and conflicts between independent groups are flagged.
+- **Lineage.** Every core row points back to its staging row and raw snapshot file; every rejected row is stored with a reason.
+
+First before/after comparison (full report: [docs/results/before_after.md](docs/results/before_after.md)):
+
+| | Before (staging) | After (core) |
+|---|---|---|
+| Rows unique at the (country, indicator, year) grain | 30.5% | 100% (by construction) |
+| Naive 3-source join, under-5 mortality / stunting | 58x / 228x row inflation | 1.0x |
+| "Conflicting" joined stunting rows | 82% (mostly breakdowns vs totals) | 16% (genuine disagreement) |
+| Concepts with independent cross-validation | not measurable | 1 of 7 (stunting) |
+| Records rejected | not tracked | 3,478 of 90,503, all empty World Bank placeholders |
+
+For six of the seven concepts, WHO, UNICEF and the World Bank publish the same underlying estimate (at least 93% of shared country-years agree within 1%), so their agreement cannot validate the number. Stunting is the exception: WHO's model-based estimates and the survey-based UNICEF and World Bank values disagree by more than 10% in 15.6% of the 326 country-years they share.
+
+## Fault-injection experiment
+
+How well do the pipeline's checks detect known errors? A seeded experiment corrupts a *copy* of the raw snapshot at known positions, runs the real pipeline on it, and records what happened to every injected row:
+
+```bash
+python -m healthbridge.experiments run --seeds 5 --resume   # about 25 minutes; resumable
+python -m healthbridge.experiments report --out docs/results/fault_injection.md
+```
+
+Full report: [docs/results/fault_injection.md](docs/results/fault_injection.md). 11,030 faults across 5 seeds and 15 corrupted snapshots (code version recorded per run; raw results are reproducible from the seeds, not committed).
+
+- **Rule-based checks** (missing, unparseable, out-of-range, duplicate, invalid or recoverable country identifier, bad date, bad vocabulary): all 9,000 injected faults were handled as expected, and 30 of 30 file-level schema faults were caught. This was designed to hold, so it shows the rules work end to end rather than that unanticipated errors would be caught.
+- **Value changes of known size** are the informative result. Detection is 0% at 2%, 57% at 5%, 96% at 10%, and at least 99.6% from 25% upward. The 5% row is a threshold effect: increases are caught 16% of the time and decreases 96%, because the disagreement threshold applies to the spread divided by the mean.
+- **Each statistical check is reported on the rows it can assess.** The disagreement check caught 100% of changes of 10% or more where another source was available; the outlier check rose from 58% at +25% to 97% at +900% among rows with enough neighbouring observations (92% of rows).
+- **False alarms:** on the unmodified data the outlier check flags 0.85% of rows and the disagreement check 1.1% of cells. The outlier check's few false positives in the experiment (precision 92%) were traced to a side effect: rejecting a row removes it from its neighbours' context.
+- **Naive loader** (parse, exact ISO3 join, drop nulls): it accepts every out-of-range value, every duplicate and every value change; the pipeline lets 18% of the 2,000 value changes through, all but one at 10% or below.
+- **Not covered:** valid-looking corruptions (a swapped but valid country or sex code, a small change with no context and no second source), and errors of kinds not injected here.
 
 ## Roadmap
 

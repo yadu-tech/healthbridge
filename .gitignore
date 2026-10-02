@@ -21,3 +21,7 @@ data/interim/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Experiment working files (corrupted snapshots, logs); results are copied to docs/results
+data/experiments/
+*.log

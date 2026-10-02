@@ -10,7 +10,6 @@ requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.2",
     "requests>=2.31",
-    "sqlalchemy>=2.0",
     "psycopg[binary]>=3.1",
 ]
 
@@ -22,6 +21,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["integration: needs the local PostgreSQL service (skipped if unreachable)"]
 
 [tool.ruff]
 line-length = 100
