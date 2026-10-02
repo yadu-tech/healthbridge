@@ -46,7 +46,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"results: {path}")
         return 0
 
-    text = render_report(json.loads(args.results.read_text(encoding="utf-8")))
+    text = render_report(json.loads(args.results.read_text(encoding="utf-8")),
+                         faults_dir=args.results.parent / "faults")
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(text, encoding="utf-8")

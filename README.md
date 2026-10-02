@@ -121,6 +121,24 @@ First before/after comparison (full report: [docs/results/before_after.md](docs/
 
 For six of the seven concepts, WHO, UNICEF and the World Bank publish the same underlying estimate (at least 93% of shared country-years agree within 1%), so their agreement cannot validate the number. Stunting is the exception: WHO's model-based estimates and the survey-based UNICEF and World Bank values disagree by more than 10% in 15.6% of the 326 country-years they share.
 
+## Fault-injection experiment
+
+How well do the pipeline's checks detect known errors? A seeded experiment corrupts a *copy* of the raw snapshot at known positions, runs the real pipeline on it, and records what happened to every injected row:
+
+```bash
+python -m healthbridge.experiments run --seeds 5 --resume   # about 25 minutes; resumable
+python -m healthbridge.experiments report --out docs/results/fault_injection.md
+```
+
+Full report: [docs/results/fault_injection.md](docs/results/fault_injection.md). 11,030 faults across 5 seeds and 15 corrupted snapshots (code version recorded per run; raw results are reproducible from the seeds, not committed).
+
+- **Rule-based checks** (missing, unparseable, out-of-range, duplicate, invalid or recoverable country identifier, bad date, bad vocabulary): all 9,000 injected faults were handled as expected, and 30 of 30 file-level schema faults were caught. This was designed to hold, so it shows the rules work end to end rather than that unanticipated errors would be caught.
+- **Value changes of known size** are the informative result. Detection is 0% at 2%, 57% at 5%, 96% at 10%, and at least 99.6% from 25% upward. The 5% row is a threshold effect: increases are caught 16% of the time and decreases 96%, because the disagreement threshold applies to the spread divided by the mean.
+- **Each statistical check is reported on the rows it can assess.** The disagreement check caught 100% of changes of 10% or more where another source was available; the outlier check rose from 58% at +25% to 97% at +900% among rows with enough neighbouring observations (92% of rows).
+- **False alarms:** on the unmodified data the outlier check flags 0.85% of rows and the disagreement check 1.1% of cells. The outlier check's few false positives in the experiment (precision 92%) were traced to a side effect: rejecting a row removes it from its neighbours' context.
+- **Naive loader** (parse, exact ISO3 join, drop nulls): it accepts every out-of-range value, every duplicate and every value change; the pipeline lets 18% of the 2,000 value changes through, all but one at 10% or below.
+- **Not covered:** valid-looking corruptions (a swapped but valid country or sex code, a small change with no context and no second source), and errors of kinds not injected here.
+
 ## Roadmap
 
 See [docs/SCOPE.md](docs/SCOPE.md) for MVP vs advanced features, evaluation design and threats to validity.

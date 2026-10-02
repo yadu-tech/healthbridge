@@ -1,7 +1,9 @@
 """Render fault-injection results (results.json) as a Markdown report."""
 from __future__ import annotations
 
+import json
 from collections import Counter, defaultdict
+from pathlib import Path
 
 from healthbridge.core.build import (
     CONFLICT_TOLERANCE,
@@ -42,7 +44,7 @@ def _rate(successes: int, n: int) -> str:
     if n == 0:
         return "n/a"
     lo, hi = wilson(successes, n)
-    return f"{_pct(successes / n)} ({_pct(lo, 0)}-{_pct(hi, 0)})"
+    return f"{_pct(successes / n)} ({_pct(lo)}-{_pct(hi)})"
 
 
 def _results(data: dict, passes: tuple[str, ...] | None = None) -> list[dict]:
@@ -56,7 +58,42 @@ def _group(results: list[dict], key) -> dict:
     return out
 
 
-def render_report(data: dict) -> str:
+def _direction_section(data: dict, faults_dir) -> list[str]:
+    """Detection of small changes split by direction, read from the fault logs.
+
+    The disagreement threshold is applied to (max - min) / mean, so a +5% change measures just
+    under 5% and a -5% change just over it: the check has a direction-dependent edge.
+    """
+    if faults_dir is None or not Path(faults_dir).exists():
+        return []
+    logged = {}
+    for path in Path(faults_dir).glob("fi_magnitude_s*.jsonl"):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            entry = json.loads(line)
+            logged[(entry["file"], entry["row_num"])] = entry
+    rows = []
+    for run in data["runs"]:
+        if run["pass"] != "magnitude":
+            continue
+        for r in run["results"]:
+            entry = logged.get((r["key"][0], r["key"][1]))
+            if entry and r["cell_members"] >= 2 and r["variant"] in ("5%", "10%"):
+                rows.append((r["variant"], float(entry["corrupted"]) > float(entry["original"]),
+                             "flagged:within_group_disagreement" in r["labels"]))
+    if not rows:
+        return []
+    out = ["", ("Small changes with a partner source, by direction. The disagreement threshold is applied to "
+           "the spread divided by the group mean, so a +5% change measures just under 5% and a -5% change "
+           "just over it. The edge of the check is therefore direction-dependent:"), "",
+           "| Change | Direction | Injected | Flagged by the disagreement check |", "|---|---|---|---|"]
+    for variant in ("5%", "10%"):
+        for up, label in ((True, "increase"), (False, "decrease")):
+            sel = [x for x in rows if x[0] == variant and x[1] == up]
+            out.append(f"| {variant} | {label} | {len(sel):,} | {_rate(sum(x[2] for x in sel), len(sel))} |")
+    return out
+
+
+def render_report(data: dict, faults_dir: Path | None = None) -> str:
     results = _results(data)
     by_type = _group(results, lambda r: r["fault_type"])
     runs = data["runs"]
@@ -99,6 +136,12 @@ def render_report(data: dict) -> str:
         "another mechanism than expected (for example rejected where repair was expected). *Silent* = "
         "loaded wrong and unflagged."),
         "",
+        ("**How to read this section.** The nine rule-based fault types were each written to violate "
+         "one explicit rule, so 100% is the expected result. It shows that the rules work end to end "
+         "through the real pipeline (including the repair of recoverable country identifiers), not "
+         "that the pipeline would catch faults nobody anticipated. The informative results are the "
+         "statistical checks in sections 3 and 5."),
+        "",
         "| Fault | What was injected | Injected | Handled correctly | Handled differently | Silent |",
         "|---|---|---|---|---|---|",
     ]
@@ -124,18 +167,35 @@ def render_report(data: dict) -> str:
     changes = by_type.get("value_change", [])
     lines += [
         "", "## 3. Value corruption by magnitude", "",
-        ("One value is changed by the stated relative amount (±). *Outlier* = flagged by the temporal "
-        "check; *Disagreement* = flagged because sources of one evidence group differ by more than "
-        f"{_pct(GROUP_DISAGREEMENT_TOLERANCE, 0)}; either counts as detection."),
+        ("One value is changed by the stated relative amount, in either direction. *Outlier check* = "
+         "flagged by the temporal check, which can only assess a row with at least 3 neighbouring "
+         "observations. *Disagreement check* = flagged because sources of one evidence group differ by "
+         f"more than {_pct(GROUP_DISAGREEMENT_TOLERANCE, 0)} of their mean, which needs a partner source "
+         "in the group. Each check is shown **on the rows it can assess**, next to the share of rows "
+         "that qualify, so a check's sensitivity is not mixed up with its coverage. Either check "
+         "counts as detection."),
         "",
-        "| Change | Injected | Detected | Outlier check | Disagreement check | Silent |", "|---|---|---|---|---|---|"]
+        ("| Change | Injected | Detected (any check) | Outlier: rows assessable | Outlier: detected among them | "
+        "Disagreement: rows with a partner | Disagreement: detected among them | Silent |"),
+        "|---|---|---|---|---|---|---|---|"]
     magnitudes = sorted(_group(changes, lambda r: r["variant"]).items(), key=lambda kv: float(kv[0].rstrip("%")))
     for variant, rs in magnitudes:
         n = len(rs)
-        has = lambda label, rs=rs: sum(label in r["labels"] for r in rs)
-        lines.append(f"| {variant} | {n:,} | {_rate(sum(r['correct'] for r in rs), n)} | "
-                     f"{_rate(has('flagged:temporal_outlier'), n)} | "
-                     f"{_rate(has('flagged:within_group_disagreement'), n)} | {_rate(sum(r['silent'] for r in rs), n)} |")
+        assessable = [r for r in rs if r["n_neighbors"] >= 3]
+        partnered = [r for r in rs if r["cell_members"] >= 2]
+        hit = lambda label, group: sum(label in r["labels"] for r in group)
+        lines.append(
+            f"| {variant} | {n:,} | {_rate(sum(r['correct'] for r in rs), n)} | {_pct(len(assessable) / n)} | "
+            f"{_rate(hit('flagged:temporal_outlier', assessable), len(assessable))} | "
+            f"{_pct(len(partnered) / n)} | "
+            f"{_rate(hit('flagged:within_group_disagreement', partnered), len(partnered))} | "
+            f"{_rate(sum(r['silent'] for r in rs), n)} |")
+    lines += [
+        "",
+        ("The shares of rows with a partner or enough neighbours drift a little between levels because "
+        "each level was sampled from the rows left after the earlier levels (one change per series and "
+        "per cell). That drift is why the per-check rates above are conditional on what each check can "
+        "assess; the sampling is not balanced across levels.")]
     large = [r for r in changes if float(r["variant"].rstrip("%")) >= 50]
     lines += ["", ("Detection of **large changes (50% or more)** by the context available to the checks "
               "(the outlier check needs at least 3 neighbouring observations; the disagreement check "
@@ -149,6 +209,8 @@ def render_report(data: dict) -> str:
         rs = strata.get(key, [])
         if rs:
             lines.append(f"| {label} | {len(rs):,} | {_rate(sum(r['correct'] for r in rs), len(rs))} |")
+
+    lines += _direction_section(data, faults_dir)
 
     lines += [
         "", "## 4. Naive loader vs pipeline", "",
@@ -202,7 +264,17 @@ def render_report(data: dict) -> str:
               f"({len([r for r in runs if r['pass'] != 'schema'])} pipeline runs).")]
     assessable = data["assessable_by_outlier_check"] / data["pool_rows"]
     lines += [(f"{_pct(assessable)} of analysis rows have enough neighbouring observations for the outlier "
-              "check to assess them at all; the rest rely on cross-source comparison.")]
+              "check to assess them at all; the rest rely on cross-source comparison."), "",
+              ("**Where the outlier check's false positives come from.** They occur almost entirely in "
+               "the validity pass, which changes no values. Replaying one validity pass "
+               "(`scripts/diagnose_outlier_false_positives.py`, seed 1) showed that all 13 of 13 false "
+               "positives had an injected row inside their neighbour window, against a chance baseline "
+               "of 18.9% for untouched rows, and every one of those neighbours was a fault the pipeline "
+               "rejected (blank or text value, out of range, invalid country, bad vocabulary or date). "
+               "Rejecting a row removes it from its neighbours' context and can tip a previously quiet "
+               "point over the threshold. So these alerts are a side effect of rejection, not errors in "
+               "the clean rows, and they suggest building the check's context from the rows present "
+               "before rejection. This was diagnosed for one seed only.")]
 
     schema = [r for r in results if r["fault_type"].startswith("schema_")]
     lines += ["", "## 6. Schema faults (file level)", "",
