@@ -100,3 +100,37 @@ Full tables: [results/ml_models.md](results/ml_models.md). 10,072 test forecasts
 - **Added after seeing the first results, and explanatory only:** the per-cut-off table and the ridge fit check. They do not change any verdict. No model was altered, retuned or dropped in response to a result, including the ridge model.
 
 The data-quality ablation (does corrupted, unvalidated data degrade these forecasts, and does the pipeline prevent it?) remains the next step.
+
+## Ablation protocol: does data quality change the forecasts? (fixed before it was built)
+
+**Question.** If the data is corrupted, how much does forecast accuracy suffer when the data is used naively, and how much of that does the pipeline prevent?
+
+**Corruption.** The fault-injection harness corrupts a copy of the raw snapshot at a *rate* of 1%, 3% or 10% of the analysis-surface rows of the four modelled indicators. The faults are split in equal shares across 14 groups: the nine validity fault types and value changes of 10%, 25%, 50%, 100% and 300%. Rows are disjoint and a series may receive several faults. Three corruption seeds per rate, so nine corrupted snapshots.
+
+**Three ways of preparing the same data.**
+- **(a) Clean, through the pipeline:** the pipeline on the uncorrupted snapshot. The reference.
+- **(b) Corrupted, naive:** the WHO rows for the four indicators, taken as published: keep rows whose sex and wealth codes are the totals (string match), join on the exact ISO3 code, drop nulls, let a later duplicate overwrite an earlier one, and apply no range, year or outlier checks. Rows that fail these steps are lost; wrong values flow through.
+- **(c) Corrupted, through the pipeline:** load, build the core layer and the marts, then use the reconciled panel **without** the values the pipeline flagged (temporal outliers and source disagreements). Variant (a) uses the same exclusion, so (a) and (c) differ only in the corruption.
+
+**Models.** The pre-chosen best baseline for each indicator, taken from stage 2 before any ablation run (linear trend for the two mortality indicators, last value for the two coverage indicators), and gradient boosting with the stage-2 hyperparameters and the mean of three seeds. Same cut-offs as stage 2. Each model is **trained on the variant's own data** (as an analyst would have it) and **scored against the clean truth** (the clean reconciled values) on test forecasts that exist in all three variants. The share of clean test forecasts a variant can produce at all (coverage) is reported separately.
+
+**Primary outcome.** At the 10% rate, for gradient boosting at the 4-5 year horizon pooled over the four indicators: the paired median degradation in absolute percentage error relative to variant (a), for (b) and for (c). The primary comparison is whether (c) degrades **less** than (b): the 95% interval of the paired per-forecast difference (resampling countries) must lie entirely on the side of the pipeline. Secondary: the same for the baseline model; the 1% and 3% rates; each indicator separately; coverage; and the spread across corruption seeds (reproducibility).
+
+**What would count against the pipeline.** No difference between (b) and (c), or (c) worse than (b). The latter is possible because discarding flagged values also discards real events. Any of these outcomes will be reported as found.
+
+**Known limits, stated now.** Injected faults are synthetic. The corruption mix and the definition of "naive" are choices. Variants (b) and (c) mostly share WHO values (WHO has the highest priority in the pipeline), so the comparison is mainly about validation, repair and cross-source checking, not about source choice. Three seeds per rate is a small number of corruptions; the country-level bootstrap covers sampling of countries, not of corruption patterns.
+
+## Ablation outcome (code version `aa05ea5`, snapshot `20261001T110703Z`; full tables in [results/ml_ablation.md](results/ml_ablation.md))
+
+**Primary outcome: met.** At the 10% rate, for gradient boosting at 4-5 years pooled over the four indicators, naive handling raised the median error by 0.95 pp (interval +0.61 to +1.33) and the pipeline by 0.16 pp (+0.01 to +0.29). The paired difference was +0.73 pp (+0.33 to +1.10), entirely on the pipeline's side. The same held at 1% (+0.26 pp, +0.02 to +0.47) and 3% (+0.55 pp, +0.34 to +0.75). Across corruption seeds the naive error ranged 7.0-7.3% against 5.6-5.9% for the pipeline at 10%, so the result does not hinge on one corruption pattern.
+
+**How large it is.** Small. A median error of about 5.5% rose to about 7.2% under naive handling at the heaviest corruption, and the pipeline held it near 5.8%. This is a measurable protection, not a rescue of an otherwise unusable forecast.
+
+**What did not go in the pipeline's favour, stated as found.**
+- **Coverage.** The pipeline can forecast fewer series than a naive loader: 94.0% / 89.4% / 77.8% of the clean forecasts at 1% / 3% / 10%, against 98.9% / 96.6% / 89.3% for the naive variant. The degradation figures use only forecasts present in all three variants, so this cost is not in them. Protection is partly bought by declining to forecast.
+- **Under-5 mortality shows no benefit.** The naive-minus-pipeline interval includes zero at 3% and 10%, and at 1% it favours the naive variant (-0.36 pp, -0.70 to -0.03). Under-5 mortality is the indicator where real, abrupt changes occur, and the pipeline's flagging also removes genuine events. At 1% the naive variant's median error (3.3%) is below the clean reference (3.9%), which is what removing some real spikes from the training data would produce. This is a plausible reading, not a tested one. The pooled benefit comes from DTP3, measles and, less clearly, the maternal mortality ratio.
+- **Maternal mortality ratio** at 1% includes zero (-0.05 to +0.86).
+
+**Baseline model: the pre-registered median metric is uninformative here.** The report shows 0.00 pp for the baselines everywhere, because a baseline forecast changes only when its own series is corrupted, and fewer than half of forecasts are affected (a post-hoc check on single corruptions: about 8% changed at 3%, about 19% at 10%). The median of the paired differences is then zero by construction. The same check showed a heavy tail (mean increase about 25 pp at 10% for one corruption, 95th percentile of absolute change about 59 pp), so baseline forecasts are badly hurt where corruption lands. That check is not in the generated report and used one corruption; the protocol's metric is reported as specified and should not be read as "baselines are unaffected".
+
+**Limits that bound the conclusion.** The faults are synthetic and their mixture is a choice. The naive variant is deliberately minimal, and a more careful analyst would do better than it. The clean reference already loses 2.5% of values to flagging. Three seeds per rate cover few corruption patterns. Results are pseudo out-of-sample on final-vintage modelled estimates (the vintage-leakage threat above) and describe four indicators.

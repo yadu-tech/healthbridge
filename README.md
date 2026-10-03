@@ -198,7 +198,14 @@ Results ([docs/results/ml_models.md](docs/results/ml_models.md), outcome and dis
 - The **ridge model is not useful for any indicator** and is poor in sample too, so it is a poor fit, not a leak. It was reported as pre-registered, not rescued after the fact.
 - These are pseudo out-of-sample results on final-vintage modelled estimates, so real-time accuracy would be lower; they are not predictions for policy.
 
-The data-quality ablation (does corrupted, unvalidated data degrade forecasts, and does the pipeline prevent it?) is specified in the same document and is the next step.
+**Data-quality ablation.** Corrupted copies of the raw snapshot (1%, 3%, 10% of rows, three seeds each) are prepared three ways: clean through the pipeline, corrupted with a naive loader, and corrupted through the pipeline. Models train on each variant's data and are scored against the clean truth:
+
+```bash
+python -m healthbridge.ml ablation run
+python -m healthbridge.ml ablation report --out docs/results/ml_ablation.md
+```
+
+Result ([docs/results/ml_ablation.md](docs/results/ml_ablation.md)): at 10% corruption the pipeline held the gradient-boosting error at 4-5 years about 0.7 percentage points below the naive loader's (interval +0.33 to +1.10), but the effect is small, the pipeline can forecast fewer series (78% against 89% of clean forecasts at 10%), and under-5 mortality shows no benefit. See the outcome section in [docs/ml_decision.md](docs/ml_decision.md).
 
 ## Roadmap
 
