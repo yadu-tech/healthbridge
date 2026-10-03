@@ -185,7 +185,20 @@ It backtests three simple baselines (last value, linear trend, average change) w
 - No single baseline wins: repeating the last value is best for the noisy coverage series, a linear trend for the smoothly falling mortality series.
 - The thresholds cut through a continuum (stunting misses by 0.4 percentage points), and the series are final-vintage modelled estimates, so backtests are pseudo out-of-sample. Both caveats are recorded.
 
-The model comparison and a data-quality ablation (does corrupted, unvalidated data degrade forecasts, and does the pipeline prevent it?) are specified in the same document and are the next step.
+**Stage 2** compares a ridge model and gradient-boosted trees, pooled across countries and indicators, with the baselines, using a panel-level rolling origin in which training never sees a year after the cut-off:
+
+```bash
+python -m healthbridge.ml models --out docs/results/ml_models.md
+```
+
+Results ([docs/results/ml_models.md](docs/results/ml_models.md), outcome and disclosure in [docs/ml_decision.md](docs/ml_decision.md)):
+
+- **Gradient boosting is useful for the two mortality indicators** at 4-5 years (about 3 percentage points lower median error than the best baseline, intervals clear of zero) and beats the baseline at all five cut-offs. It is **not** useful for DTP3 or measles coverage, where repeating the last value is hard to beat.
+- The advantage is at long horizons: at one year a simple linear trend is better, at 6-10 years boosting is about 8 points better.
+- The **ridge model is not useful for any indicator** and is poor in sample too, so it is a poor fit, not a leak. It was reported as pre-registered, not rescued after the fact.
+- These are pseudo out-of-sample results on final-vintage modelled estimates, so real-time accuracy would be lower; they are not predictions for policy.
+
+The data-quality ablation (does corrupted, unvalidated data degrade forecasts, and does the pipeline prevent it?) is specified in the same document and is the next step.
 
 ## Roadmap
 

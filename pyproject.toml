@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]
 dashboard = ["streamlit>=1.40"]
+ml = ["scikit-learn>=1.4"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
