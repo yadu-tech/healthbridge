@@ -185,3 +185,37 @@ def test_pre_registered_protocol_values_are_pinned():
     assert s2.CUTOFFS == (2005, 2008, 2011, 2014, 2017) and s2.DECISIVE_BUCKET == "4-5"
     assert md.SEEDS == (0, 1, 2, 3, 4) and set(ds.CONCEPTS) == {
         "under5_mortality", "maternal_mortality_ratio", "dtp3_coverage", "measles_mcv1_coverage"}
+
+
+# --- diagnostics added after the first real run ---------------------------------------------
+
+def test_by_cutoff_reports_each_cutoff_against_the_same_best_baseline(stage2_result):
+    _, results = stage2_result
+    summary = s2.summarize_models(results, resamples=50, seeds=(0, 1))
+    table = s2.by_cutoff(results, summary)
+    assert set(table["cutoff"]) == {2008, 2014} and set(table["concept"]) == set(ds.CONCEPTS)
+    chosen = summary[(summary["bucket"] == "4-5") & (summary["model"] == "gbm")].set_index("concept")["best_baseline"]
+    assert all(row.best_baseline == chosen[row.concept] for row in table.itertuples())
+    assert table["gbm_beats_baseline"].dtype == bool
+    one = table.iloc[0]
+    subset = results[(results["concept"] == one["concept"]) & (results["cutoff"] == one["cutoff"])
+                     & results["horizon"].between(4, 5)]
+    assert one["gbm_ape"] == pytest.approx(subset["ape_gbm"].median())
+
+
+def test_ridge_fit_check_compares_in_and_out_of_sample(stage2_result):
+    inst, _ = stage2_result
+    check = s2.ridge_fit_check(inst, RANGES, cutoff=2011)
+    assert set(check["sample"]) == {"in sample (training)", "out of sample (test)"}
+    assert set(check["concept"]) == set(ds.CONCEPTS)
+    assert np.isfinite(check[["last_value", "linear_trend_5", "ridge"]].to_numpy()).all()
+    assert (check["n"] > 0).all()
+
+
+def test_report_includes_the_robustness_and_fit_sections(stage2_result):
+    inst, results = stage2_result
+    summary = s2.summarize_models(results, resamples=50, seeds=(0, 1))
+    text = s2.render_models_report(results, summary, s2.verdicts(summary), {2008: 1, 2014: 2},
+                                   s2.by_cutoff(results, summary), s2.ridge_fit_check(inst, RANGES, cutoff=2011))
+    assert "Is the result driven by one cut-off?" in text and "Why is the ridge model poor?" in text
+    assert "median of per-instance differences" in text

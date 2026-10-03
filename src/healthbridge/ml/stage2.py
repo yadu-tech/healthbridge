@@ -105,8 +105,44 @@ def verdicts(summary: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def by_cutoff(results: pd.DataFrame, summary: pd.DataFrame) -> pd.DataFrame:
+    """At the decisive horizon: does each model beat the best baseline at every cut-off, or only on average?"""
+    best = (summary[(summary["bucket"] == DECISIVE_BUCKET) & (summary["model"] == "gbm")]
+            .set_index("concept")["best_baseline"].to_dict())
+    data = results[results["horizon"].map(bucket_of) == DECISIVE_BUCKET]
+    rows = []
+    for (concept, cutoff), g in data.groupby(["concept", "cutoff"]):
+        base = f"ape_{best[concept]}"
+        rows.append({"concept": concept, "cutoff": int(cutoff), "n_instances": len(g),
+                     "best_baseline": best[concept], "baseline_ape": float(g[base].median()),
+                     "ridge_ape": float(g["ape_ridge"].median()), "gbm_ape": float(g["ape_gbm"].median()),
+                     "gbm_beats_baseline": bool(g["ape_gbm"].median() < g[base].median())})
+    return pd.DataFrame(rows)
+
+
+def ridge_fit_check(instances: pd.DataFrame, ranges: dict[str, tuple[float, float]], cutoff: int = 2014) -> pd.DataFrame:
+    """Is a poor ridge result a leak, an overfit or a poor fit? Compare its error in and out of sample at 1 year.
+
+    A leak or an overfit would make it look good in sample and bad out of sample; a poor fit is bad in both.
+    """
+    train, test = split(instances, cutoff)
+    x_train, x_test = design_matrix(train), design_matrix(test)
+    ridge = make_ridge().fit(x_train, train["y"])
+    rows = []
+    for label, frame, x in (("in sample (training)", train, x_train), ("out of sample (test)", test, x_test)):
+        frame = frame[frame["horizon"] == 1]
+        pred = to_values(frame, ridge.predict(x.loc[frame.index]), ranges)
+        ape = pd.Series(np.abs(pred - frame["actual"].to_numpy()) / frame["actual"].to_numpy(), index=frame.index)
+        for concept, g in frame.groupby("concept"):
+            rows.append({"concept": concept, "sample": label, "last_value": float(g["ape_last_value"].median()),
+                         "linear_trend_5": float(g["ape_linear_trend_5"].median()),
+                         "ridge": float(ape[g.index].median()), "n": len(g)})
+    return pd.DataFrame(rows)
+
+
 def render_models_report(results: pd.DataFrame, summary: pd.DataFrame, verdict: pd.DataFrame,
-                         train_sizes: dict[int, int]) -> str:
+                         train_sizes: dict[int, int], robustness: pd.DataFrame | None = None,
+                         ridge_check: pd.DataFrame | None = None) -> str:
     def pct(x):
         return "n/a" if pd.isna(x) else f"{100 * x:.1f}%"
 
@@ -159,9 +195,34 @@ def render_models_report(results: pd.DataFrame, summary: pd.DataFrame, verdict: 
                          f"{100 * gbm.median_diff:+.2f} ({100 * gbm.diff_low:+.2f} to {100 * gbm.diff_high:+.2f})"])
         lines += table(["Years ahead", "Instances", "Best baseline", "Its error", "Ridge", "GBM (seed range)",
                         "Ridge vs best", "GBM vs best"], body) + [""]
+    if robustness is not None and len(robustness):
+        lines += ["## 3. Is the result driven by one cut-off?", "",
+                  ("Median error at 4-5 years at each cut-off: the best baseline, ridge and gradient boosting. "
+                   "A consistent win across cut-offs is stronger evidence than a win on average."), ""]
+        lines += table(["Indicator", "Cut-off", "Instances", "Best baseline", "Its error", "Ridge", "GBM",
+                        "GBM beats baseline"],
+                       [[r.concept, r.cutoff, r.n_instances, r.best_baseline, pct(r.baseline_ape), pct(r.ridge_ape),
+                         pct(r.gbm_ape), "yes" if r.gbm_beats_baseline else "no"] for r in robustness.itertuples()])
+        wins = robustness.groupby("concept")["gbm_beats_baseline"].agg(["sum", "count"])
+        lines += ["", "Cut-offs at which gradient boosting beats the best baseline: "
+                  + "; ".join(f"{c} {int(w['sum'])} of {int(w['count'])}" for c, w in wins.iterrows()) + ".", ""]
+    if ridge_check is not None and len(ridge_check):
+        lines += ["## 4. Why is the ridge model poor? A fit check", "",
+                  ("The ridge model is much worse than a trivial baseline at one year. To tell a leak or an overfit "
+                   "from a poor fit, its median error at one year is shown on the data it was trained on and on "
+                   "unseen data (cut-off 2014). A leak or overfit would look good in sample and bad out of sample; "
+                   "a poor fit is bad in both. A single pooled linear model cannot capture how four different "
+                   "indicators move. It is reported as pre-registered and was not changed after seeing results."), ""]
+        lines += table(["Indicator", "Sample", "Last value", "Linear trend", "Ridge", "Instances"],
+                       [[r.concept, r.sample, pct(r.last_value), pct(r.linear_trend_5), pct(r.ridge), r.n]
+                        for r in ridge_check.itertuples()])
+        lines += [""]
     lines += [
-        "## 3. How to read this",
+        "## 5. How to read this",
         "",
+        ("- **The paired difference is the median of per-instance differences.** It can differ in sign from the "
+         "difference between two medians. A model can have a lower median error yet be typically worse instance "
+         "by instance, which is why the rule requires the paired interval and not only the medians."),
         ("- **Pseudo out-of-sample.** The series are final-vintage modelled estimates, so the history a model sees "
         "already carries information from later years. Real-time forecast error would be larger."),
         "- **Forecasting a model's output.** Skill is skill at extrapolating another model's estimates.",
@@ -181,6 +242,9 @@ def run_stage2(instances: pd.DataFrame, ranges: dict[str, tuple[float, float]], 
     summary = summarize_models(results, resamples=resamples)
     verdict = verdicts(summary)
     sizes = results.groupby("cutoff")["n_train"].first().to_dict()
-    return {"results": results, "summary": summary, "verdict": verdict,
-            "report": render_models_report(results, summary, verdict, sizes),
+    robustness = by_cutoff(results, summary)
+    ridge_check = ridge_fit_check(instances, ranges)
+    return {"results": results, "summary": summary, "verdict": verdict, "robustness": robustness,
+            "ridge_check": ridge_check,
+            "report": render_models_report(results, summary, verdict, sizes, robustness, ridge_check),
             "indicators": sorted(set(CONCEPTS) & set(results["concept"]))}
