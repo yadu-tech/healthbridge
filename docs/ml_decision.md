@@ -73,3 +73,30 @@ Full tables: [results/ml_gate.md](results/ml_gate.md). **Decision: go, for four 
 **A model is reported as useful for an indicator only if** its median absolute percentage error at the 4-5 year horizon is below the best baseline's, **and** the 95% interval of the paired difference (resampling countries) lies entirely below zero. Models that do not clear this are reported as not beating the baseline. A negative result is a result.
 
 **Data-quality ablation (the research link).** The same forecasting task is run on (a) the integrated, validated data; (b) a snapshot corrupted by the fault-injection harness and processed naively, with no validation; and (c) the same corrupted snapshot processed by the pipeline. All three are scored against the clean truth. The outcome measures are forecast error, and the spread of results across seeds, as a function of the fault rate.
+
+## Stage 2 outcome: the model comparison (snapshot `20261001T110703Z`)
+
+Full tables: [results/ml_models.md](results/ml_models.md). 10,072 test forecasts from 54 countries, five cut-offs, four indicators. The success rule was applied exactly as written above.
+
+| Indicator | Gradient boosting at 4-5 years | Ridge |
+|---|---|---|
+| Under-5 mortality | **useful**: -2.83 pp against the best baseline (95% interval -4.30 to -1.61) | not useful |
+| Maternal mortality ratio | **useful**: -3.50 pp (-5.42 to -1.98) | not useful |
+| DTP3 coverage | not useful: typically worse than repeating the last value (+0.47 pp, +0.08 to +0.95) | not useful |
+| Measles (MCV1) coverage | not useful: tied (+0.08 pp, -0.24 to +0.58) | not useful |
+
+**What this says.**
+- Gradient boosting beats the best simple baseline on the two mortality indicators at **every one of the five cut-offs**, so the result is not an artefact of one period. For the two immunization indicators it wins at 3 of 5 cut-offs and the paired interval is not below zero, so the pre-registered rule does not call it useful.
+- The advantage is a long-horizon one. At one year the simple linear trend is better (under-5 mortality: 1.3% against 3.1% for gradient boosting); at 6-10 years boosting is better by about 8 percentage points for both mortality indicators. A pooled model that has seen how mortality declines across countries helps most where straight-line extrapolation drifts.
+- Seed-to-seed spread of gradient boosting at 4-5 years is at most 0.4 percentage points, so seed noise is not driving the verdict.
+- The ridge model is not useful for any indicator. It is poor in sample as well as out of sample (7-11% error at one year against 3-4% for a trivial baseline), which points to a poor fit of one pooled linear model to four differently moving indicators, not to leakage or overfitting.
+
+**What it does not say.** These are pseudo out-of-sample results on final-vintage modelled estimates (see the vintage-leakage note above), so real-time skill would be lower and the long-horizon gains in particular should be read with that in mind. It is skill at extrapolating another model's estimates, not at predicting health outcomes, and it is not a basis for policy or for ranking countries.
+
+### What was decided after seeing results (disclosure)
+
+- **Fixed in advance and used as written:** the indicators, models, cut-offs, features, success rule and hyperparameters. Hyperparameters were set before any run and not tuned.
+- **Implementation choices made before the first run, not in the protocol text:** the gradient-boosting headline forecast is the mean of the five seeds, with each seed's own error reported as a stability check; interaction terms between the horizon and recent changes were added as derived features; the best baseline is chosen per indicator and horizon on the test data, which favours the baseline.
+- **Added after seeing the first results, and explanatory only:** the per-cut-off table and the ridge fit check. They do not change any verdict. No model was altered, retuned or dropped in response to a result, including the ridge model.
+
+The data-quality ablation (does corrupted, unvalidated data degrade these forecasts, and does the pipeline prevent it?) remains the next step.
