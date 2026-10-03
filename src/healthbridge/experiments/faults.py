@@ -253,13 +253,17 @@ def _country_lookup() -> tuple[dict, dict]:
 
 
 def inject_validity(store: RawStore, parsed: dict, pool: list[PoolRow], rng: random.Random,
-                    n: int) -> list[Fault]:
-    """Pass 1: structural and value-validity faults, ``n`` rows per type, disjoint rows."""
+                    n: int, exclude: set[tuple[str, int]] | None = None,
+                    fault_types: tuple[str, ...] = VALIDITY_FAULTS) -> list[Fault]:
+    """Pass 1: structural and value-validity faults, ``n`` rows per type, disjoint rows.
+
+    ``exclude`` lists (file, row) identities that must not be touched, so that passes can be combined.
+    """
     ranges = indicator_ranges()
     countries, aliases = _country_lookup()
     eligible = clean_universe(pool)
     rng.shuffle(eligible)
-    used: set[tuple[str, int]] = set()
+    used: set[tuple[str, int]] = set(exclude or ())
     faults: list[Fault] = []
     appended: dict[str, int] = {}
 
@@ -289,7 +293,7 @@ def inject_validity(store: RawStore, parsed: dict, pool: list[PoolRow], rng: ran
                      p.year, original, corrupted, expected=sorted(EXPECTED[fault_type]),
                      cell_members=p.cell_members, n_neighbors=p.n_neighbors, orig_value=p.value)
 
-    for fault_type in VALIDITY_FAULTS:
+    for fault_type in fault_types:
         pred = has_dimension if fault_type == "categorical_invalid" else (lambda _p: True)
         for p in take(pred):
             row = row_of(p)
@@ -364,19 +368,30 @@ def inject_validity(store: RawStore, parsed: dict, pool: list[PoolRow], rng: ran
 
 
 def inject_magnitude(store: RawStore, parsed: dict, pool: list[PoolRow], rng: random.Random,
-                     n: int) -> list[Fault]:
-    """Pass 2: change one value by a known relative amount, at most one row per series and cell."""
+                     n: int, magnitudes: tuple[float, ...] = MAGNITUDES, isolate: bool = True,
+                     exclude: set[tuple[str, int]] | None = None) -> list[Fault]:
+    """Pass 2: change one value by a known relative amount.
+
+    With ``isolate`` (the detection experiment) at most one row per series and per cell is changed, so one
+    error cannot contaminate the context used to judge another. Without it (the ablation) corruption is
+    random, as real errors would be; a row is still changed at most once.
+    """
     ranges = indicator_ranges()
-    eligible = [p for p in clean_universe(pool) if p.n_neighbors >= 3 or p.cell_members >= 2]
+    skip = set(exclude or ())
+    eligible = [p for p in clean_universe(pool)
+                if (p.n_neighbors >= 3 or p.cell_members >= 2) and (p.file, p.row_num) not in skip]
     rng.shuffle(eligible)
     used_series: set[tuple] = set()
     used_cells: set[tuple] = set()
+    used_rows: set[tuple[str, int]] = set()
     faults: list[Fault] = []
-    for magnitude in MAGNITUDES:
+    for magnitude in magnitudes:
         count = 0
         for p in eligible:
             cell = (p.concept, p.iso3, p.year)
-            if p.series in used_series or cell in used_cells:
+            if (p.file, p.row_num) in used_rows:
+                continue
+            if isolate and (p.series in used_series or cell in used_cells):
                 continue
             lo, hi = ranges[p.concept]
             new = changed_value(rng, p.value, magnitude, lo, hi)
@@ -387,6 +402,7 @@ def inject_magnitude(store: RawStore, parsed: dict, pool: list[PoolRow], rng: ra
             set_value(p.source, row, new, p.value)
             used_series.add(p.series)
             used_cells.add(cell)
+            used_rows.add((p.file, p.row_num))
             faults.append(Fault("value_change", f"{magnitude:+.0%}".replace("+", ""), p.source, p.file,
                                 p.row_num, p.concept, p.iso3, p.year, original, str(new),
                                 expected=sorted(EXPECTED["value_change"]), cell_members=p.cell_members,
@@ -395,6 +411,24 @@ def inject_magnitude(store: RawStore, parsed: dict, pool: list[PoolRow], rng: ra
             if count == n:
                 break
     return faults
+
+
+ABLATION_MAGNITUDES = (0.10, 0.25, 0.50, 1.0, 3.0)
+
+
+def inject_mixed(store: RawStore, parsed: dict, pool: list[PoolRow], rng: random.Random,
+                 rate: float) -> list[Fault]:
+    """Corrupt ``rate`` of the pool's analysis rows, in equal shares across the fault groups.
+
+    The groups are the nine validity fault types and value changes at five magnitudes. Value changes
+    are placed first and their rows excluded from the validity faults, so no row is hit twice.
+    """
+    groups = len(VALIDITY_FAULTS) + len(ABLATION_MAGNITUDES)
+    per_group = max(1, round(rate * len(clean_universe(pool)) / groups))
+    changes = inject_magnitude(store, parsed, pool, rng, per_group, ABLATION_MAGNITUDES, isolate=False)
+    touched = {(f.file, f.row_num) for f in changes}
+    validity = inject_validity(store, parsed, pool, rng, per_group, exclude=touched)
+    return changes + validity
 
 
 def inject_schema(store: RawStore, parsed: dict, rng: random.Random, files_per_type: int = 2) -> list[Fault]:
