@@ -171,6 +171,22 @@ streamlit run src/healthbridge/dashboard/app.py
 
 Trust is part of the interface (quality tiers and flags appear on every series), relationships carry an "associations, not causes" notice, countries are never ranked, and every chart has a table view. The colour palette was checked with a validator for light and dark modes. Design decisions, the validation record and limitations: [docs/dashboard.md](docs/dashboard.md).
 
+## Machine learning: a gate, then models
+
+Machine learning is a downstream demonstration, so whether to do it is itself decided from the data. The criteria and thresholds were written down and committed **before** any backtest was run ([docs/ml_decision.md](docs/ml_decision.md)), and the gate applies them:
+
+```bash
+python -m healthbridge.ml gate --out docs/results/ml_gate.md
+```
+
+It backtests three simple baselines (last value, linear trend, average change) with rolling origins that cannot see data after their origin, and a bootstrap that resamples countries. First result ([docs/results/ml_gate.md](docs/results/ml_gate.md)):
+
+- **Go for four indicators** (under-5 mortality, maternal mortality, DTP3 and measles coverage); **no-go for three** (neonatal mortality and stunting, whose baselines are already too accurate to leave room, and skilled birth attendance, which is too sparse).
+- No single baseline wins: repeating the last value is best for the noisy coverage series, a linear trend for the smoothly falling mortality series.
+- The thresholds cut through a continuum (stunting misses by 0.4 percentage points), and the series are final-vintage modelled estimates, so backtests are pseudo out-of-sample. Both caveats are recorded.
+
+The model comparison and a data-quality ablation (does corrupted, unvalidated data degrade forecasts, and does the pipeline prevent it?) are specified in the same document and are the next step.
+
 ## Roadmap
 
 See [docs/SCOPE.md](docs/SCOPE.md) for MVP vs advanced features, evaluation design and threats to validity.
