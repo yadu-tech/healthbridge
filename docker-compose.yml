@@ -17,5 +17,38 @@ services:
       timeout: 5s
       retries: 10
 
+  # Pipeline commands, run on demand:
+  #   docker compose run --rm pipeline python -m healthbridge.staging migrate
+  # The profile keeps it from starting with `docker compose up`.
+  pipeline:
+    profiles: ["tools"]
+    build: .
+    image: healthbridge:local
+    command: ["python", "-m", "healthbridge.staging", "migrate"]
+    environment: &appenv
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"  # the port inside the compose network, not the published one
+      POSTGRES_USER: ${POSTGRES_USER:?copy .env.example to .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy .env.example to .env}
+      POSTGRES_DB: ${POSTGRES_DB:-healthbridge}
+    volumes:
+      # Snapshots and reports stay on the host; the image holds code only.
+      - ./data:/app/data
+      - ./docs:/app/docs
+    depends_on:
+      db:
+        condition: service_healthy
+
+  dashboard:
+    profiles: ["app"]
+    build: .
+    image: healthbridge:local
+    environment: *appenv
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-8501}:8501"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   healthbridge_pgdata:

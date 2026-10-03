@@ -3,7 +3,7 @@
 **Bridging disconnected African healthcare datasets.**
 A reproducible data-engineering platform that ingests public maternal and child health data from multiple sources, validates and harmonizes it, and serves reliable data for analytics and downstream machine learning.
 
-> **Status: early development.** Implemented so far: raw ingestion, staging, data-quality measurement and the core (integrated) layer. Analytics, machine learning, the API and the dashboard are planned. Sections marked _planned_ describe intended work.
+> **Status: research prototype.** Implemented: raw ingestion, staging, data-quality measurement, the core (integrated) layer, analytics marts, a dashboard, a fault-injection experiment, a gated machine-learning study with a data-quality ablation, containers and CI. Not yet implemented: an API service and workflow orchestration. Sections marked _planned_ describe intended work.
 
 ## Problem
 
@@ -206,6 +206,22 @@ python -m healthbridge.ml ablation report --out docs/results/ml_ablation.md
 ```
 
 Result ([docs/results/ml_ablation.md](docs/results/ml_ablation.md)): at 10% corruption the pipeline held the gradient-boosting error at 4-5 years about 0.7 percentage points below the naive loader's (interval +0.33 to +1.10), but the effect is small, the pipeline can forecast fewer series (78% against 89% of clean forecasts at 10%), and under-5 mortality shows no benefit. See the outcome section in [docs/ml_decision.md](docs/ml_decision.md).
+
+## Containers and CI
+
+One image (`Dockerfile`) runs both the pipeline commands and the dashboard; PostgreSQL stays a separate service. Source code is in the image; snapshots and reports stay on the host (`./data`, `./docs` are mounted).
+
+```bash
+cp .env.example .env                                   # local values only, never committed
+docker compose up -d db
+docker compose --profile tools run --rm pipeline       # applies migrations (default command)
+docker compose --profile tools run --rm pipeline python -m healthbridge.ingest run
+docker compose --profile app up -d dashboard           # http://127.0.0.1:8501
+```
+
+Any command in this README can be run the same way by replacing `python -m ...` after `pipeline`. The services publish ports on `127.0.0.1` only, and the dashboard container runs as a non-root user.
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and push to `main`: lint (`ruff`), the full test suite against a PostgreSQL 16 service (a missing database fails the run rather than skipping tests), and a build of the image with a smoke test of its entry point. CI does not call the public data APIs, so it does not depend on their availability.
 
 ## Roadmap
 

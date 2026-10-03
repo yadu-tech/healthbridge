@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: healthbridge
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: healthbridge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U healthbridge -d healthbridge"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: healthbridge
+      POSTGRES_PASSWORD: ci_only_password
+      POSTGRES_DB: healthbridge
+      # Fail, rather than skip, the database tests if Postgres is unreachable.
+      HEALTHBRIDGE_REQUIRE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev,dashboard,ml]"
+      - run: ruff check .
+      - run: pytest -q -rs
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t healthbridge:ci .
+      - name: Pipeline entry point starts and imports
+        run: docker run --rm healthbridge:ci python -m healthbridge.staging --help
