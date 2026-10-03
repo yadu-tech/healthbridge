@@ -160,6 +160,17 @@ What the first report shows (descriptive, one snapshot):
 - **Some series are out of date.** Skilled birth attendance is a median of 3 years behind (up to 14); 37% of countries are 5 or more years behind.
 - **Some extreme values are unverified.** A few countries show large short-run rises in under-5 mortality (single-year spikes and multi-year shifts). The outlier check flags the former but not the latter, and these values have not been checked against source documentation.
 
+## Dashboard
+
+A Streamlit app over the analytics marts, with six pages: an overview of how far each indicator can be trusted, country profiles, country comparison, relationships between indicators, equity gaps, and the pipeline and data-quality record.
+
+```bash
+pip install -e ".[dashboard]"
+streamlit run src/healthbridge/dashboard/app.py
+```
+
+Trust is part of the interface (quality tiers and flags appear on every series), relationships carry an "associations, not causes" notice, countries are never ranked, and every chart has a table view. The colour palette was checked with a validator for light and dark modes. Design decisions, the validation record and limitations: [docs/dashboard.md](docs/dashboard.md).
+
 ## Roadmap
 
 See [docs/SCOPE.md](docs/SCOPE.md) for MVP vs advanced features, evaluation design and threats to validity.
