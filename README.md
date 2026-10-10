@@ -23,9 +23,16 @@ How can automated data integration and data-quality validation improve the relia
 
 Only aggregate, public, non-personal data is used.
 
-## Architecture _(planned)_
+## Documentation
 
-`raw` → `staging` → `core` (star schema) → `marts` → `ml`, with data-quality results in `dq`. Details in [docs/SCOPE.md](docs/SCOPE.md).
+- **[Research report](docs/REPORT.md):** the question, method, findings and limitations in one place. Start here.
+- **[Architecture](docs/architecture.md):** data-flow diagram, layer guarantees, design decisions and what was not built.
+- **[Data dictionary](docs/data_dictionary.md):** every table and column, generated from the live schema (`python -m healthbridge.dictionary --out docs/data_dictionary.md`).
+- [Scope and research design](docs/SCOPE.md), [harmonization rules](docs/harmonization.md), [analytics definitions](docs/analytics.md), [dashboard design](docs/dashboard.md), [ML decision record](docs/ml_decision.md) and the generated results in [docs/results/](docs/results/).
+
+## Architecture
+
+`raw` (files) → `staging` → `core` (integrated) → `marts` (analysis-ready), with data-quality measurements in `dq`. The forecasting study reads the marts. Diagram and rationale in [docs/architecture.md](docs/architecture.md).
 
 ## Getting started
 
@@ -229,7 +236,7 @@ See [docs/SCOPE.md](docs/SCOPE.md) for MVP vs advanced features, evaluation desi
 
 ## Limitations and ethics
 
-Documented in [docs/SCOPE.md](docs/SCOPE.md) and expanded as results are produced.
+Findings, what they do not show, and the threats to validity are in sections 7 and 8 of the [research report](docs/REPORT.md). Only aggregate, public, non-personal data is used; the dashboard never ranks countries and presents associations as associations.
 
 ## License
 

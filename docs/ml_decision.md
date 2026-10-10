@@ -99,7 +99,7 @@ Full tables: [results/ml_models.md](results/ml_models.md). 10,072 test forecasts
 - **Implementation choices made before the first run, not in the protocol text:** the gradient-boosting headline forecast is the mean of the five seeds, with each seed's own error reported as a stability check; interaction terms between the horizon and recent changes were added as derived features; the best baseline is chosen per indicator and horizon on the test data, which favours the baseline.
 - **Added after seeing the first results, and explanatory only:** the per-cut-off table and the ridge fit check. They do not change any verdict. No model was altered, retuned or dropped in response to a result, including the ridge model.
 
-The data-quality ablation (does corrupted, unvalidated data degrade these forecasts, and does the pipeline prevent it?) remains the next step.
+The data-quality ablation (does corrupted, unvalidated data degrade these forecasts, and does the pipeline prevent it?) was run next; its protocol and outcome are in the two sections below.
 
 ## Ablation protocol: does data quality change the forecasts? (fixed before it was built)
 
