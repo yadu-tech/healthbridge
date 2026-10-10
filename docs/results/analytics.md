@@ -1,6 +1,6 @@
 # Analytics report: snapshot `20261001T110703Z`
 
-Generated from the marts built 2026-10-02 19:06 UTC with `python -m healthbridge.marts report`. Definitions, grains and caveats are in [../analytics.md](../analytics.md). Parameters: trend window from 2000; cross-country comparisons use the observation nearest 2015 within +-3 years (changes: 2000 to 2015).
+Generated from the marts built 2026-10-10 17:29 UTC with `python -m healthbridge.marts report`. Definitions, grains and caveats are in [../analytics.md](../analytics.md). Parameters: trend window from 2000; cross-country comparisons use the observation nearest 2015 within +-3 years (changes: 2000 to 2015).
 
 **How to read this.** Everything here is descriptive. Associations are between countries (ecological), cannot show cause, and are partly shaped by shared geography, income and history. Averages are of countries, not people. Many series are modelled estimates, and most indicators cannot be cross-checked because the sources republish one estimate.
 
@@ -80,6 +80,15 @@ Countries whose reconciled under-5 mortality was more than 10% higher than four 
 | Zimbabwe | 56.3 (2018) | 64.0 (2022) | 14% | 0 |
 | Sudan | 54.3 (2020) | 61.6 (2024) | 13% | 0 |
 | South Africa | 71.4 (2000) | 80.7 (2004) | 13% | 0 |
+
+## 3c. Flat runs in modelled series
+
+A modelled mortality estimate that repeats exactly for four or more consecutive years is a feature of the producer's model, such as a constant fit through a conflict period, not a measurement. It says nothing about the trend, and trend figures across it (including those above) are misleading. The flag is informational: flagged values are kept and are not excluded by the analysis panel's exclusion rule.
+
+| Country | Indicator | Years | Length | Value |
+|---|---|---|---|---|
+| Somalia | under5_mortality | 1995-2004 | 10 | 173.2 |
+| South Sudan | under5_mortality | 2019-2024 | 6 | 96.7 |
 
 ## 4. Associations between indicators across countries
 
