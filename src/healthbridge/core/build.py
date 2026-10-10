@@ -13,6 +13,7 @@ from pathlib import Path
 
 import psycopg
 
+from healthbridge.core.flat_runs import FLAT_RUN_CONCEPTS, MIN_RUN, flag_flat_runs
 from healthbridge.core.outliers import (
     NEIGHBORS_EACH_SIDE,
     OUTLIER_ABS_FLOOR,
@@ -179,6 +180,7 @@ def build_core(
         conn.execute(_sql("40_fact.sql"), params)
         conn.execute("DROP TABLE pg_temp.core_std, pg_temp.core_classified")
         outliers = flag_temporal_outliers(conn, run_id)
+        flat_runs = flag_flat_runs(conn, run_id)
 
         _measure_dependence(conn, run_id, dependence_tolerance, dependence_min_shared,
                             dependence_min_share)
@@ -195,7 +197,7 @@ def build_core(
         summary = {"run_id": run_id, "staged_rows": staged, "rows_loaded": counts[0],
                    "rows_rejected": rejected, "headline_rows": counts[1], "selected_rows": counts[2]}
         # Alerts are reported separately from the accounting above so it keeps its meaning.
-        alerts = {"temporal_outliers": outliers}
+        alerts = {"temporal_outliers": outliers, "flat_run_rows": flat_runs}
         conn.execute(
             "INSERT INTO core.build_log (run_id, staged_rows, rows_loaded, rows_rejected,"
             " headline_rows, selected_rows, duration_seconds, parameters)"
@@ -210,6 +212,7 @@ def build_core(
                          "outlier_z": OUTLIER_Z, "outlier_rel_floor": OUTLIER_REL_FLOOR,
                          "outlier_abs_floor": OUTLIER_ABS_FLOOR,
                          "outlier_neighbors_each_side": NEIGHBORS_EACH_SIDE,
+                         "flat_run_min_years": MIN_RUN, "flat_run_concepts": list(FLAT_RUN_CONCEPTS),
                          "alerts": alerts})),
         )
     return summary

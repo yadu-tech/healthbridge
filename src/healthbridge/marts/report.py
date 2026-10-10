@@ -142,6 +142,27 @@ def render_marts_report(conn: psycopg.Connection, run_id: str | None = None) -> 
         out += ["No country shows a rise above 10% over four years in this snapshot."]
     out += [""]
 
+    out += ["## 3c. Flat runs in modelled series", "",
+            ("A modelled mortality estimate that repeats exactly for four or more consecutive years is a "
+             "feature of the producer's model, such as a constant fit through a conflict period, not a "
+             "measurement. It says nothing about the trend, and trend figures across it (including those "
+             "above) are misleading. The flag is informational: flagged values are kept and are not "
+             "excluded by the analysis panel's exclusion rule."), ""]
+    flat = conn.execute(
+        "WITH f AS (SELECT p.country_key, p.indicator_key, p.year, p.value, "
+        " p.year - row_number() OVER (PARTITION BY p.country_key, p.indicator_key ORDER BY p.year) AS g "
+        " FROM marts.country_indicator_year p WHERE p.run_id = %s AND p.flat_run) "
+        "SELECT c.name, i.concept, min(f.year), max(f.year), count(*), min(f.value) "
+        "FROM f JOIN core.dim_country c USING (country_key) JOIN core.dim_indicator i USING (indicator_key) "
+        "GROUP BY c.name, i.concept, f.country_key, f.indicator_key, f.g ORDER BY count(*) DESC, 1",
+        (run_id,)).fetchall()
+    if flat:
+        out += _table(["Country", "Indicator", "Years", "Length", "Value"],
+                      [[n, concept, f"{a}-{b}", length, _f(v)] for n, concept, a, b, length, v in flat])
+    else:
+        out += ["No flat runs in this snapshot."]
+    out += [""]
+
     out += ["## 4. Associations between indicators across countries", "",
             ("Spearman rank correlation with an approximate 95% interval (Fisher z). **Associations "
             "only.** Levels compare countries at one time; changes compare how countries moved. "

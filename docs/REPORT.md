@@ -85,7 +85,7 @@ The pre-registered primary outcome was met, and the result holds across corrupti
 - **Judgement thresholds.** Plausible ranges, headline definitions, tolerances, outlier parameters and the ML gate thresholds were fixed in advance but are judgements. The gate's 5% threshold cuts through a continuum.
 - **Modelled estimates.** Most series are model outputs (UN IGME, WUENIC, MMEIG), not observations. Forecast skill is skill at extrapolating another model's estimates, and because the panel is final-vintage, the backtests are pseudo out-of-sample: real-time error would be larger, especially at long horizons.
 - **Dependence inferred from values.** Source independence is derived from agreement, not documentation; two sources could agree by coincidence or differ for benign reasons such as rounding or vintage.
-- **Crisis-year estimates.** Large short-run rises in under-5 mortality in a few conflict-affected countries (South Sudan, Central African Republic, Libya, Somalia) were reviewed against the producer's methodology ([extreme_values_review.md](extreme_values_review.md)). None is a pipeline artefact, and 5 of the 12 flagged values are named in a secondary source as documented crisis additions to the UN IGME series. So an outlier flag means "unusual", not "wrong". The producer's own country notes could not be read, so the values are not confirmed against them, and flat stretches in modelled series (Somalia 1995 to 2004, South Sudan 2019 to 2024) are model features, not data. The outlier check flags single-year spikes but not multi-year shifts.
+- **Crisis-year estimates.** Large short-run rises in under-5 mortality in a few conflict-affected countries (South Sudan, Central African Republic, Libya, Somalia) were reviewed against the producer's methodology ([extreme_values_review.md](extreme_values_review.md)). None is a pipeline artefact, and 5 of the 12 flagged values are named in a secondary source as documented crisis additions to the UN IGME series. So an outlier flag means "unusual", not "wrong". The producer's own country notes could not be read, so the values are not confirmed against them, and flat stretches in modelled series (Somalia 1995 to 2004, South Sudan 2019 to 2024) are model features, not data; the pipeline now flags them (`flat_run`), informationally, and the fault-injection experiment does not score that flag. The outlier check flags single-year spikes but not multi-year shifts.
 - **One snapshot.** Estimates are revised between releases. Three corruption seeds per rate cover few corruption patterns; the country bootstrap covers sampling of countries, not of corruption patterns.
 - **Ecological associations.** Cross-country correlations (for example -0.74 between under-5 mortality and DTP3 coverage) are descriptive, treat countries as independent observations, and say nothing about cause.
 - **Shocks.** DTP3 and measles coverage fell in 2020-2021, which inflates errors for every method.
@@ -111,7 +111,7 @@ python -m healthbridge.ml ablation run                          # about 2 hours
 pytest
 ```
 
-Re-running ingestion creates a new snapshot, so numbers will change as the sources revise their estimates; the snapshot identifier is printed in every report. The 144 tests run in CI against PostgreSQL on every pull request.
+Re-running ingestion creates a new snapshot, so numbers will change as the sources revise their estimates; the snapshot identifier is printed in every report. The 158 tests run in CI against PostgreSQL on every pull request.
 
 ## 10. What a next step would be
 

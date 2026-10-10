@@ -268,7 +268,7 @@ Every valid observation at an explicit grain, with lineage, quality flags and se
 | `is_selected` | boolean | no | True for the row chosen for the default surface when several candidates exist. |
 | `n_candidates` | integer | no | Number of candidate rows for the cell before selection. |
 | `selection_rule` | text | yes | Rule that chose this row (producer priority, then latest period). |
-| `quality_flags` | ARRAY | no | Flags raised for this row, for example temporal_outlier or noncanonical_period. |
+| `quality_flags` | ARRAY | no | Flags raised for this row, for example temporal_outlier, flat_run or noncanonical_period. |
 | `staging_source_file` | text | no | Raw file of the originating staging row (lineage). |
 | `staging_row_num` | integer | no | Row position of the originating staging row (lineage). |
 | `country_resolution` | text | no | How the country code was resolved: exact, normalized, iso2 or alias. |
@@ -437,6 +437,7 @@ The analysis panel: reconciled values with quality tier and flags.
 | `quality_tier` | text | no | single_evidence, cross_validated or conflict. |
 | `outlier_flag` | boolean | no | True when the temporal outlier check flagged the value. |
 | `source_disagreement` | boolean | no | True when sources inside the evidence group disagree beyond the tolerance. |
+| `flat_run` | boolean | no | True when the value sits in a run of 4+ years with an identical modelled mortality value (informational). |
 
 ### `marts.country_latest` (table)
 
@@ -476,6 +477,7 @@ How far each indicator can be trusted: coverage, cross-validation and flag share
 | `share_conflict` | double precision | no | Share of values in conflict. |
 | `share_outlier_flag` | double precision | no |  |
 | `share_source_disagreement` | double precision | no |  |
+| `share_flat_run` | double precision | no | Share of values inside a flat run. |
 
 ### `marts.equity_gap` (table)
 
@@ -618,6 +620,7 @@ The panel joined to country and indicator names.
 | `n_sources` | integer | yes | Number of sources with a value for the cell. |
 | `n_evidence_groups` | integer | yes | Number of independent evidence groups; 1 means agreement is not independent confirmation. |
 | `reconciled_source` | text | yes | Source that supplied the reconciled value. |
+| `flat_run` | boolean | yes | True when the value sits in a run of 4+ years with an identical modelled mortality value (informational). |
 
 ## dq
 

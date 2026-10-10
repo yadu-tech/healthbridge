@@ -284,6 +284,18 @@ def test_views_follow_the_latest_build_and_carry_dimensions(marts):
 
 
 @pytest.mark.integration
+def test_latest_run_is_the_most_recent_build_even_within_one_transaction(marts):
+    conn, run_dir, _ = marts
+    with conn.transaction():
+        # a second run built earlier in the same open transaction must not win a tie on built_at
+        conn.execute("INSERT INTO marts.build_log (run_id, built_at, rows, parameters)"
+                     " VALUES ('older', clock_timestamp(), '{}', '{}')")
+        build_marts(conn, run_dir, min_countries=5)
+        assert q(conn, "SELECT run_id FROM marts.latest_run")[0][0] == "mart1"
+        conn.execute("DELETE FROM marts.build_log WHERE run_id = 'older'")
+
+
+@pytest.mark.integration
 def test_rebuild_is_idempotent_and_records_parameters(marts):
     conn, run_dir, first = marts
     second = build_marts(conn, run_dir, min_countries=5)

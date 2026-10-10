@@ -40,7 +40,7 @@ One lead I could not confirm: a search summary of an LSHTM study of South Sudan 
 
 1. **A flag is not an error.** The temporal outlier check fires on estimates that the producer deliberately adds for crisis years. For under-5 mortality, at least 5 of the 12 flagged values are named as documented crisis estimates. Treat a flag as "this value is unusual and needs a reason", not "this value is wrong". The pipeline keeps flagged rows, as before.
 2. **The ablation result for under-5 mortality is better explained.** Variant (a) and (c) drop flagged values, so for this indicator they drop genuine crisis-year estimates as well as corruptions. That is consistent with the pipeline showing no benefit for under-5 mortality, and with the naive variant at 1% scoring better than the clean reference. This supports the explanation recorded in the ablation outcome; it is still not a controlled test of it.
-3. **Flat stretches in a modelled series are model features, not data.** Somalia (ten identical values) and South Sudan (six) show that a run of identical values in a mortality series reflects a modelling choice. Trend estimates for these countries (annual percentage change since 2000) are affected and should be read with that in mind. Repeated integers in coverage indicators are normal and are not the same phenomenon.
+3. **Flat stretches in a modelled series are model features, not data** (now flagged by the pipeline, see the follow-up below). Somalia (ten identical values) and South Sudan (six) show that a run of identical values in a mortality series reflects a modelling choice. Trend estimates for these countries (annual percentage change since 2000) are affected and should be read with that in mind. Repeated integers in coverage indicators are normal and are not the same phenomenon.
 4. **Analyses that use these series should say what they are.** They are estimates that include modelled crisis deaths, not observed mortality, and the forecasting study in particular extrapolates them (see the report's limitations).
 
 ## Still open
@@ -48,4 +48,7 @@ One lead I could not confirm: a search summary of an LSHTM study of South Sudan 
 - Read UN IGME's own country notes for the values marked "not documented" (from childmortality.org, which blocked automated access) and confirm the years of Somalia's constant fit.
 - Find whether South Sudan's constant 96.7 is a documented projection.
 - Read the LSHTM study for what it says about child mortality.
-- A check that detects constant runs in modelled series and labels them would be a small addition to the pipeline. It was not added here because the evidence for what the runs mean is incomplete.
+
+## Follow-up: the flat-run check
+
+After this review the pipeline gained a `flat_run` flag ([harmonization.md](harmonization.md), D9). It labels the two constant runs found here and nothing else on the first snapshot (16 country-years, in WHO and UNICEF rows). It is informational: it does not remove values. A correction to this review: it said no constant run of three or more years existed in neonatal or maternal mortality. That was true of the reconciled panel but not of every source's rows: the World Bank's one-decimal values repeat through rounding in slowly changing low-mortality series (for example Seychelles neonatal mortality at 8.7 for twelve years). The check therefore does not assess series published to one decimal or less.

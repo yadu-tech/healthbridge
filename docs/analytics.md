@@ -25,7 +25,7 @@ Views `marts.v_panel` and `marts.v_country_latest` attach names and regions and 
 
 ## Definitions
 
-**Quality tier.** `cross_validated`: two or more independent evidence groups reported the value and agreed within tolerance. `single_evidence_group`: all sources republish one estimate, so the value cannot be cross-checked (agreement between WHO, UNICEF and the World Bank is not independent confirmation; see [harmonization.md](harmonization.md), D7). `conflict`: independent groups differ by more than 10%. `outlier_flag`: the reconciled source's row deviates from its neighbouring years. `source_disagreement`: sources of the same group differ by more than 5% in that cell.
+**Quality tier.** `cross_validated`: two or more independent evidence groups reported the value and agreed within tolerance. `single_evidence_group`: all sources republish one estimate, so the value cannot be cross-checked (agreement between WHO, UNICEF and the World Bank is not independent confirmation; see [harmonization.md](harmonization.md), D7). `conflict`: independent groups differ by more than 10%. `outlier_flag`: the reconciled source's row deviates from its neighbouring years. `source_disagreement`: sources of the same group differ by more than 5% in that cell. `flat_run`: the reconciled source's row sits in a run of four or more years with an identical modelled mortality value, a model feature that carries no information about the trend (informational, not an exclusion; see [harmonization.md](harmonization.md), D9).
 
 **Latest value and staleness.** `years_behind` is the latest year available for the indicator anywhere minus the country's latest year, so an old survey value is not mistaken for a current one.
 
