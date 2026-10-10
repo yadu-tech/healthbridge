@@ -113,9 +113,11 @@ def render_marts_report(conn: psycopg.Connection, run_id: str | None = None) -> 
              "check, which compares each year with its neighbours. A **single-year spike** is flagged; "
              "the last column counts flagged years inside the span so the two can be told apart. "
              "Flagged rows stay in the data. All sources agree because they republish one estimate, "
-             "which says nothing about whether the values are right. **These values have not been "
-             "verified against the source documentation** and should be checked before any is used "
-             "in an analysis; they also account for extreme values in the regional ranges above."), ""]
+             "which says nothing about whether the values are right. These values were reviewed "
+             "against the producer's methodology (docs/extreme_values_review.md): most are crisis-year "
+             "estimates that the UN IGME method is documented to add, so a flag means \"unusual, needs a "
+             "reason\", not \"wrong\". They are not confirmed against its country-level notes, and they "
+             "also account for extreme values in the regional ranges above."), ""]
     reversals = conn.execute(
         "WITH w AS (SELECT p.country_key, p.year, p.value, "
         " lag(p.value, 4) OVER (PARTITION BY p.country_key ORDER BY p.year) AS v_prev, "

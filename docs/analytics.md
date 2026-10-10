@@ -45,7 +45,7 @@ Views `marts.v_panel` and `marts.v_country_latest` attach names and regions and 
 - **Ecological, not individual.** A correlation across countries says nothing about the individuals within them, and countries that share a region, income level or history are not independent observations, so the intervals understate the uncertainty.
 - **Built-in relationships.** Some pairs are related by definition (neonatal deaths are part of under-5 deaths) or by delivery (DTP3 and measles vaccines are given through the same programme). Their strong correlations are not informative.
 - **Modelled estimates.** Most mortality and immunization series are model-based, smooth by construction, and revised between releases. Results depend on the snapshot date.
-- **Sustained shocks versus errors.** The outlier check flags isolated deviations; a multi-year shift (for example during conflict) is not flagged. Neither pattern has been verified against source documentation, and the report says so.
+- **Sustained shocks versus errors.** The outlier check flags isolated deviations; a multi-year shift (for example during conflict) is not flagged. These were reviewed against the producer's methodology in [extreme_values_review.md](extreme_values_review.md): most are crisis-year estimates the producer's method is documented to add, so a flag means unusual, not wrong. They are not confirmed against the producer's country notes, and the report says so.
 - **Source priority.** Equity gaps mix modelled (WHO) and survey (UNICEF) series by a fixed priority rule; survey gaps rest on small samples.
 - **No weights, no causation, no forecasts.** Population weighting, causal inference and forecasting are outside this release.
 
