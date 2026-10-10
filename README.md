@@ -176,6 +176,15 @@ pip install -e ".[dashboard]"
 streamlit run src/healthbridge/dashboard/app.py
 ```
 
+![Overview: how far each indicator can be trusted](docs/images/dashboard_overview.png)
+
+| | |
+|---|---|
+| ![Country profile](docs/images/dashboard_country_profile.png) | ![Relationships between indicators](docs/images/dashboard_relationships.png) |
+| ![Pipeline and data quality](docs/images/dashboard_pipeline_and_quality.png) | |
+
+Screenshots are generated, not hand-made: with the dashboard running, `pip install -e ".[screenshots]"` and `python scripts/capture_screenshots.py` rewrite `docs/images/`. They use an installed Microsoft Edge by default (`--channel chrome` for Chrome) and need no browser download.
+
 Trust is part of the interface (quality tiers and flags appear on every series), relationships carry an "associations, not causes" notice, countries are never ranked, and every chart has a table view. The colour palette was checked with a validator for light and dark modes. Design decisions, the validation record and limitations: [docs/dashboard.md](docs/dashboard.md).
 
 ## Machine learning: a gate, then models
