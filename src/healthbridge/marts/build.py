@@ -66,9 +66,11 @@ def build_marts(conn: psycopg.Connection, run_dir: Path, **overrides) -> dict:
                                 (run_id,)).fetchone()[0] for t in MART_TABLES}
         logged = {k: v for k, v in params.items()
                   if k in DEFAULTS or k in ("year_min", "year_max", "n_countries")}
+        # clock_timestamp(), not the column default now(): now() is the transaction start, so two builds
+        # in one transaction would tie and marts.latest_run could pick the older one.
         conn.execute(
-            "INSERT INTO marts.build_log (run_id, rows, parameters, duration_seconds)"
-            " VALUES (%s, %s, %s, %s)",
+            "INSERT INTO marts.build_log (run_id, built_at, rows, parameters, duration_seconds)"
+            " VALUES (%s, clock_timestamp(), %s, %s, %s)",
             (run_id, json.dumps(rows), json.dumps(logged), time.perf_counter() - started),
         )
     return {"run_id": run_id, **rows}
