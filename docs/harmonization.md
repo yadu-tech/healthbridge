@@ -70,8 +70,14 @@ WHO's region for each country is stored beside the UN sub-region because they di
 
 `n_evidence_groups = 1` means the value **cannot be cross-validated**. When independent groups differ by more than 10% (**judgement**) the cell is flagged `conflict` and consumers should read `group_values`, not the single reconciled value. On the first snapshot, 51 of 326 cross-validated stunting country-years were conflicts (15.6%), and no other concept had cross-validated cells.
 
+## D9. Flat runs in modelled series are flagged, not removed
+
+A modelled mortality estimate that repeats exactly for four or more consecutive years is a feature of the producer's model, not a measurement. The UN IGME method paper documents a constant fit through conflict periods for some countries (Alkema and New 2014, Somalia), and a stretch with no new data can be held constant. Such a stretch carries no information about the trend. The check adds the quality flag `flat_run` to the selected headline rows of under-5 mortality, neonatal mortality and the maternal mortality ratio that sit inside such a run (**judgement**: four years, years consecutive, equal to within 1e-9).
+
+Two guards, both recorded with their reasons in `core/flat_runs.py`: coverage indicators are not checked because whole-number percentages repeat legitimately, and a series published to one decimal place or less is not assessed, because a slowly changing low-mortality series repeats through rounding alone (the World Bank's Seychelles neonatal mortality is 8.7 for twelve years). The flag is informational: it is not part of the analysis panel's exclusion rule, and the fault-injection experiment does not score it. On the first snapshot it flags 16 country-years: Somalia 1995 to 2004 and South Sudan 2019 to 2024, in both WHO and UNICEF rows. The first draft of the check, without the precision guard, also flagged World Bank rows in five countries; the guard removed them.
+
 ## What this layer does not do
 
 - It does not decide which source is *right*; it exposes where independent evidence disagrees.
-- Outlier detection is not applied; it belongs after harmonization and is future work.
+- It does not repair values. Temporal outliers, source disagreements and flat runs are flagged, and flagged rows stay in the data.
 - Subnational data, World Bank region and income group, and AU regions are not included.
