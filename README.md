@@ -42,7 +42,7 @@ Requirements: Python 3.11+, Docker Desktop.
 cp .env.example .env          # set a local password
 docker compose up -d          # start PostgreSQL
 python -m venv .venv && .venv/Scripts/activate
-pip install -e ".[dev]"
+pip install -c constraints.txt -e ".[dev]"
 python -m healthbridge.staging migrate   # create the layered schemas and staging tables
 pytest
 python scripts/profile_sources.py   # regenerate docs/source_profile.md
@@ -172,7 +172,7 @@ What the first report shows (descriptive, one snapshot):
 A Streamlit app over the analytics marts, with six pages: an overview of how far each indicator can be trusted, country profiles, country comparison, relationships between indicators, equity gaps, and the pipeline and data-quality record.
 
 ```bash
-pip install -e ".[dashboard]"
+pip install -c constraints.txt -e ".[dashboard]"
 streamlit run src/healthbridge/dashboard/app.py
 ```
 
@@ -236,6 +236,8 @@ docker compose --profile app up -d dashboard           # http://127.0.0.1:8501
 ```
 
 Any command in this README can be run the same way by replacing `python -m ...` after `pipeline`. The services publish ports on `127.0.0.1` only, and the dashboard container runs as a non-root user.
+
+**Pinned dependencies.** `pyproject.toml` states version ranges; `constraints.txt` pins every installed package to the exact versions the last green CI run used (Python 3.12, Linux), and both CI and the Docker image install with it (`pip install -c constraints.txt ...`), so a rebuild gets the versions that were tested. How to refresh the pins is written at the top of the file. They are tested on Python 3.12 only; they resolve on 3.13 (checked with a dry run) but the suite was not run there with the pinned set.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and push to `main`: lint (`ruff`), the full test suite against a PostgreSQL 16 service (a missing database fails the run rather than skipping tests), and a build of the image with a smoke test of its entry point. CI does not call the public data APIs, so it does not depend on their availability.
 
