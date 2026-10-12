@@ -1,6 +1,6 @@
 # HealthBridge: Scope and Research Design
 
-_Status: v0.1, written before implementation. Update via pull request/commit, not silently, so scope changes remain traceable._
+_Status: v1.0. Sections 1 to 10 are the plan as written before implementation (v0.1) and are kept so that changes stay traceable; section 11 records what was built, what changed and what was not done. Update via pull request, not silently._
 
 ## 1. Problem
 
@@ -39,7 +39,7 @@ Consequence: the research contribution is **provenance-aware integration and gra
 
 ## 5. Architecture
 
-`raw` (immutable snapshots, checksums, manifests) → `staging` (typed, source-shaped) → `core` (standardized dimensions; `fact_observation`) → `marts` (analytics, planned) → `ml` (feature tables, planned). Data-quality results are stored in `dq`. Raw, staging, core and dq are implemented.
+`raw` (immutable snapshots, checksums, manifests) → `staging` (typed, source-shaped) → `core` (standardized dimensions; `fact_observation`) → `marts` (analytics) → `ml` (feature tables, planned). Data-quality results are stored in `dq`. As built: raw, staging, core, marts and dq are implemented; the `ml` schema was left empty (see section 11).
 
 Core model (implemented): `dim_country` (ISO3/ISO2, canonical name, UN M49 sub-region, WHO region; name aliases in `country_alias`), `dim_indicator` (harmonized concept with unit, definition and plausible range; source codes in `indicator_source_map`), `dim_source`, `dim_year` (the data is annual, so a year dimension replaces a full date dimension), and `fact_observation` at an explicit grain (source, country, indicator, year, sex, wealth quintile, residence, maternal education, age group, upstream series) with lineage, quality flags and selection flags. `fact_reconciled` holds one value per country-indicator-year with evidence-group provenance. Rejected rows are stored with reasons in `rejected_record`. Every rule and its evidence is recorded in [harmonization.md](harmonization.md).
 
@@ -74,3 +74,24 @@ Chosen after profiling, as a downstream demonstration only. Candidates: forecast
 ## 10. Ethics
 
 Only aggregate, public, non-personal data. Country-level differences are preserved and cross-country comparison limits are documented. Uncertainty is shown with results.
+
+## 11. What was built and what changed (v1.0)
+
+The full account is the [research report](REPORT.md) and the [architecture document](architecture.md). This section lists the differences from the plan above.
+
+**Built as planned.** Three sources, seven concepts, an immutable-snapshot raw layer, staging, core, marts and `dq` in PostgreSQL, a validation suite with a before/after report, a naive-loader comparison, fault injection with precision and false-alarm counts, one ML task with baselines and rolling-origin backtests, a Streamlit dashboard, tests, CI, a Docker image, a README and a short report.
+
+**Changed from the plan.**
+
+| Plan | What happened | Why |
+|---|---|---|
+| Evaluation 4: the same model on single-source raw data against integrated data | The ablation compares a naive loader with the full pipeline on data corrupted by the fault-injection harness, both scored against the clean truth | The profiling pass (section 4) found that the sources largely republish one estimate, so integrating them adds little new data for a model. What the pipeline can plausibly change is how much corruption harms the forecasts, which is what the ablation measures (the protocol is in [ml_decision.md](ml_decision.md)). |
+| Evaluation 3: rebuild from raw and confirm identical outputs by checksum | Idempotent core, marts and load builds are tested, and the data-quality baseline is tested to reproduce its metrics; there is no end-to-end checksum comparison of all outputs | Not done. Outputs are reproducible by construction and by the tests above, but this was not verified as originally described. |
+| ML candidates: forecasting, cross-source anomaly detection, clustering | Forecasting only, decided by a pre-registered gate on the data | The gate and its criteria are in [ml_decision.md](ml_decision.md). The other two candidates were not pursued; ML was meant to stay a downstream demonstration. |
+| `ml` schema holding feature tables | The schema exists and is empty | The study reads the marts panel and keeps working data in memory and in result files; persisting feature tables had no consumer. |
+| Source dependence was not in the plan | Added: dependence between sources is derived from the data and reconciliation never averages | Found in the profiling pass (section 4): the sources largely republish one upstream estimate, so agreement is not independent confirmation. |
+| Check set: duplicates, name variants, unit errors, date formats, outliers, dropped values | Implemented as rule-based checks plus temporal outlier, within-group disagreement and (added later) flat-run flags | Unit-error faults were represented as value changes of known size rather than as a separate fault type. |
+
+**Advanced items.** Not built: a FastAPI service (no consumer), workflow orchestration (runs are started by command), dbt (the transformations are a few dozen SQL statements), freshness and drift monitoring, and additional African sources (AfDB, HDX). Context indicators (health expenditure, workforce) were not added.
+
+**Threats to validity.** Section 9 stands. The additions that results made necessary (final-vintage pseudo out-of-sample forecasts, synthetic faults, inferred source dependence, crisis-year estimates) are in section 7 of the report.

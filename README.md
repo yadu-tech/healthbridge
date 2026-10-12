@@ -241,7 +241,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and push 
 
 ## Roadmap
 
-See [docs/SCOPE.md](docs/SCOPE.md) for MVP vs advanced features, evaluation design and threats to validity.
+The brief is complete. Not built, by choice: a FastAPI service, workflow orchestration, dbt, drift monitoring and further sources. [docs/SCOPE.md](docs/SCOPE.md) section 11 lists what changed from the plan and why; the open items are in section 10 of the [report](docs/REPORT.md).
 
 ## Limitations and ethics
 
