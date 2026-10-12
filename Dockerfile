@@ -10,9 +10,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Dependencies first so source edits do not invalidate this layer.
-COPY pyproject.toml ./
+COPY pyproject.toml constraints.txt ./
 RUN mkdir -p src/healthbridge && touch src/healthbridge/__init__.py \
-    && pip install -e ".[dashboard,ml]"
+    && pip install -c constraints.txt -e ".[dashboard,ml]"
 
 COPY src ./src
 COPY sql ./sql

@@ -98,7 +98,7 @@ Only aggregate, public, non-personal data is used. Country-level differences are
 
 ```bash
 cp .env.example .env && docker compose up -d db
-pip install -e ".[dev,dashboard,ml]"
+pip install -c constraints.txt -e ".[dev,dashboard,ml]"
 python -m healthbridge.ingest run && python -m healthbridge.staging load
 python -m healthbridge.dq baseline                              # staging, the 'before'
 python -m healthbridge.core build

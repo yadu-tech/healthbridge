@@ -81,7 +81,7 @@ Solid arrows are the production path; dotted arrows are measurement and experime
 - **Code:** each experiment run records the code version; the working tree's untracked files are ignored when computing it.
 - **Schema:** versioned migrations; `public.schema_migrations` stores a checksum per migration.
 - **Randomness:** fault injection, bootstrap and model seeds are fixed and listed in the reports. Raw experiment output is reproducible from seeds and is not committed.
-- **Environment:** `docker compose` for PostgreSQL, the `Dockerfile` for the application, and GitHub Actions running lint and the full test suite against a PostgreSQL service.
+- **Environment:** `constraints.txt` pins every dependency to the versions CI last passed with, `docker compose` for PostgreSQL, the `Dockerfile` for the application, and GitHub Actions running lint and the full test suite against a PostgreSQL service.
 
 ## Not built
 
